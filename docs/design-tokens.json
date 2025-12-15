@@ -1,0 +1,109 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "color": {
+    "primary": {
+      "50": { "$value": "#0F2347", "$description": "浅色背景/徽章 (Dark)" },
+      "100": { "$value": "#1A3564", "$description": "悬浮态背景 (Dark)" },
+      "500": { "$value": "#4C8DFF", "$description": "主品牌色 - 科技蓝 (Dark)" },
+      "600": { "$value": "#6AA3FF", "$description": "悬浮态" },
+      "700": { "$value": "#85B8FF", "$description": "按下态" }
+    },
+    "secondary": {
+      "50": { "$value": "#3A1A12", "$description": "浅色背景 (Dark)" },
+      "500": { "$value": "#FF8A5C", "$description": "主CTA色 - 活力橙 (Dark)" },
+      "600": { "$value": "#FFA57D", "$description": "悬浮态" }
+    },
+    "neutral": {
+      "0": { "$value": "#000000", "$description": "OLED纯黑" },
+      "50": { "$value": "#0A0A0A", "$description": "主背景" },
+      "100": { "$value": "#141414", "$description": "卡片表面" },
+      "200": { "$value": "#1E1E1E", "$description": "悬浮态" },
+      "300": { "$value": "#2A2A2A", "$description": "边框" },
+      "400": { "$value": "#71717A", "$description": "禁用文本" },
+      "500": { "$value": "#A1A1AA", "$description": "次要文本" },
+      "600": { "$value": "#E4E4E7", "$description": "主要文本" }
+    },
+    "background": {
+      "base": { "$value": "#0A0A0A" },
+      "surface": { "$value": "#141414" },
+      "elevated": { "$value": "#1E1E1E" },
+      "overlay": { "$value": "rgba(0,0,0,0.6)" }
+    },
+    "semantic": {
+      "success": { "$value": "#10B981" },
+      "warning": { "$value": "#F59E0B" },
+      "error": { "$value": "#EF4444" },
+      "info": { "$value": "#60A5FA" }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "primary": { "$value": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
+      "mono": { "$value": "'JetBrains Mono', 'Fira Code', 'Consolas', monospace" }
+    },
+    "fontSize": {
+      "hero": { "$value": "48px" },
+      "h1": { "$value": "32px" },
+      "h2": { "$value": "24px" },
+      "h3": { "$value": "20px" },
+      "bodyLg": { "$value": "18px" },
+      "body": { "$value": "16px" },
+      "small": { "$value": "14px" },
+      "caption": { "$value": "12px" }
+    },
+    "fontWeight": {
+      "regular": { "$value": "400" },
+      "medium": { "$value": "500" },
+      "semibold": { "$value": "600" },
+      "bold": { "$value": "700" }
+    },
+    "lineHeight": {
+      "tight": { "$value": "1.1" },
+      "snug": { "$value": "1.3" },
+      "normal": { "$value": "1.5" },
+      "relaxed": { "$value": "1.6" }
+    }
+  },
+  "spacing": {
+    "xs": { "$value": "4px" },
+    "sm": { "$value": "8px" },
+    "md": { "$value": "16px" },
+    "lg": { "$value": "24px" },
+    "xl": { "$value": "32px" },
+    "2xl": { "$value": "48px" },
+    "3xl": { "$value": "64px" },
+    "4xl": { "$value": "96px" }
+  },
+  "borderRadius": {
+    "sm": { "$value": "4px" },
+    "md": { "$value": "8px" },
+    "lg": { "$value": "12px" },
+    "xl": { "$value": "16px" },
+    "full": { "$value": "9999px" }
+  },
+  "boxShadow": {
+    "card": { "$value": "0 0 0 1px rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.5)" },
+    "cardHover": { "$value": "0 0 0 1px rgba(255,255,255,0.1), 0 8px 24px rgba(0,0,0,0.6)" },
+    "glowPrimary": { "$value": "0 0 20px rgba(76,141,255,0.4), 0 0 40px rgba(76,141,255,0.2)" },
+    "glowSecondary": { "$value": "0 0 20px rgba(255,138,92,0.4), 0 0 40px rgba(255,138,92,0.2)" },
+    "modal": { "$value": "0 0 0 1px rgba(255,255,255,0.1), 0 24px 48px rgba(0,0,0,0.7)" }
+  },
+  "animation": {
+    "duration": {
+      "fast": { "$value": "150ms" },
+      "normal": { "$value": "250ms" },
+      "slow": { "$value": "400ms" }
+    },
+    "easing": {
+      "default": { "$value": "ease-out" },
+      "smooth": { "$value": "ease-in-out" }
+    }
+  },
+  "breakpoint": {
+    "sm": { "$value": "640px" },
+    "md": { "$value": "768px" },
+    "lg": { "$value": "1024px" },
+    "xl": { "$value": "1280px" },
+    "2xl": { "$value": "1536px" }
+  }
+}

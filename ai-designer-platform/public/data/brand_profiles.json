@@ -1,0 +1,84 @@
+{
+  "projects": [
+    {
+      "id": "shanghai-tech-2025",
+      "name": "2025上海科技博览会",
+      "description": "科技创新与未来生活主题展览",
+      "brand_profile": {
+        "primary_color": "#0052CC",
+        "secondary_color": "#00C7B7",
+        "accent_color": "#FF6B35",
+        "font_family": "Inter, Noto Sans SC",
+        "logo_url": "/images/shanghai-tech-logo.svg",
+        "style_keywords": ["科技感", "未来主义", "智能", "创新"],
+        "restrictions": ["避免传统元素", "保持现代感"]
+      }
+    },
+    {
+      "id": "shenzhen-culture-2024",
+      "name": "2024深圳文博会\"非遗新造\"展区",
+      "description": "传统非遗与现代设计的融合创新",
+      "brand_profile": {
+        "primary_color": "#8B4513",
+        "secondary_color": "#D4A574",
+        "accent_color": "#C41E3A",
+        "font_family": "Noto Serif SC, serif",
+        "logo_url": "/images/shenzhen-culture-logo.svg",
+        "style_keywords": ["国潮", "传统", "工艺", "文化传承"],
+        "restrictions": ["保持传统韵味", "融入现代设计语言"]
+      }
+    },
+    {
+      "id": "guangzhou-kids-2025",
+      "name": "2025广州儿童互动展",
+      "description": "寓教于乐的儿童互动体验展览",
+      "brand_profile": {
+        "primary_color": "#FF6B9D",
+        "secondary_color": "#7DD3FC",
+        "accent_color": "#FCD34D",
+        "font_family": "Nunito, Noto Sans SC",
+        "logo_url": "/images/guangzhou-kids-logo.svg",
+        "style_keywords": ["童趣", "活力", "教育", "互动"],
+        "restrictions": ["色彩明亮活泼", "避免过于复杂的图案"]
+      }
+    }
+  ],
+  "content_types": [
+    { "id": "booth", "name": "展台/空间效果图", "icon": "layout" },
+    { "id": "signage", "name": "导视系统", "icon": "signpost" },
+    { "id": "poster", "name": "宣传海报/主视觉", "icon": "image" },
+    { "id": "merchandise", "name": "文创衍生品", "icon": "gift" },
+    { "id": "mood", "name": "氛围参考图", "icon": "palette" }
+  ],
+  "style_preferences": [
+    { "id": "minimalist", "name": "极简主义" },
+    { "id": "cyberpunk", "name": "赛博朋克" },
+    { "id": "organic", "name": "自然有机" },
+    { "id": "guochao", "name": "国潮风格" },
+    { "id": "industrial", "name": "工业风" },
+    { "id": "futuristic", "name": "未来主义" },
+    { "id": "retro", "name": "复古风格" },
+    { "id": "tech", "name": "科技感" }
+  ],
+  "aspect_ratios": [
+    { "id": "16:9", "name": "16:9 横版", "width": 16, "height": 9 },
+    { "id": "9:16", "name": "9:16 竖版", "width": 9, "height": 16 },
+    { "id": "1:1", "name": "1:1 正方形", "width": 1, "height": 1 },
+    { "id": "3:4", "name": "3:4 竖版", "width": 3, "height": 4 },
+    { "id": "4:3", "name": "4:3 横版", "width": 4, "height": 3 },
+    { "id": "custom", "name": "自定义尺寸", "width": null, "height": null }
+  ],
+  "ai_platforms": [
+    { "id": "dalle", "name": "DALL-E 3", "icon": "openai" },
+    { "id": "midjourney", "name": "Midjourney", "icon": "midjourney" },
+    { "id": "stable-diffusion", "name": "Stable Diffusion", "icon": "stability" },
+    { "id": "tongyi", "name": "通义万相", "icon": "alibaba" }
+  ],
+  "special_requirements": [
+    { "id": "whitespace", "name": "留白区域(放置文字)" },
+    { "id": "multi-angle", "name": "多角度生成" },
+    { "id": "high-detail", "name": "高清细节" },
+    { "id": "seamless", "name": "无缝拼接" },
+    { "id": "transparent", "name": "透明背景" }
+  ]
+}
