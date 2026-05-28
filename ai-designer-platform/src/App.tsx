@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Header } from './components/Header'
 import { ProjectSelector } from './components/ProjectSelector'
 import { GenerationForm } from './components/GenerationForm'
 import { PromptPreview } from './components/PromptPreview'
 import { ResultsGrid } from './components/ResultsGrid'
 import { TemplateLibrary } from './components/TemplateLibrary'
+import { ImageGeneratorSettings } from './components/ImageGeneratorSettings'
+import { ThemeToggle } from './components/ThemeToggle'
 import { AuthModal } from './components/AuthModal'
 import { useBrandData } from './hooks/useBrandData'
 import { useAuth } from './contexts/AuthContext'
+import { useSettings } from './contexts/SettingsContext'
 import { generatePromptFromRequest } from './lib/promptBuilder'
 import { isSupabaseConfigured } from './lib/supabase'
 import { 
@@ -15,6 +18,7 @@ import {
   saveGenerationHistory, 
   getGenerationHistory,
   clearGenerationHistory,
+  deleteGenerationHistory,
   saveUserTemplate,
   getUserTemplates,
   deleteUserTemplate
@@ -38,6 +42,7 @@ const initialRequest: GenerationRequest = {
 function App() {
   const { data: brandData, loading: brandLoading, error: brandError, createProject, deleteProject } = useBrandData()
   const { user, loading: authLoading, signOut, isConfigured } = useAuth()
+  const { activeGenerator } = useSettings()
   const [activeTab, setActiveTab] = useState('workspace')
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [request, setRequest] = useState<GenerationRequest>(initialRequest)
@@ -47,6 +52,9 @@ function App() {
   const [history, setHistory] = useState<GeneratedImage[]>([])
   const [showAuthModal, setShowAuthModal] = useState(false)
   const [userTemplates, setUserTemplates] = useState<Template[]>([])
+  const [genTestResult, setGenTestResult] = useState<string | null>(null)
+  const [generationError, setGenerationError] = useState<string | null>(null)
+  const templateAppliedRef = useRef(false)
 
   // Load history from database when user logs in
   useEffect(() => {
@@ -128,6 +136,11 @@ function App() {
   // Update prompt when request changes
   useEffect(() => {
     if (request.contentType) {
+      // When a template was just applied, skip auto-generation to keep its hand-crafted prompt
+      if (templateAppliedRef.current) {
+        templateAppliedRef.current = false
+        return
+      }
       const newPrompt = generatePromptFromRequest(request, selectedProject)
       setRequest(prev => ({ ...prev, prompt: newPrompt }))
     }
@@ -148,11 +161,6 @@ function App() {
     setRequest(prev => ({ ...prev, projectId: project.id }))
   }
 
-  // Handle AI platform change
-  const handlePlatformChange = (platform: string) => {
-    setRequest(prev => ({ ...prev, aiPlatform: platform }))
-  }
-
   // Handle prompt change (manual edit)
   const handlePromptChange = (prompt: string) => {
     setRequest(prev => ({ ...prev, prompt }))
@@ -165,6 +173,7 @@ function App() {
     setIsGenerating(true)
     setProgress(0)
     setGeneratedImages([])
+    setGenerationError(null)
 
     // Simulate progress
     const progressInterval = setInterval(() => {
@@ -175,12 +184,21 @@ function App() {
     }, 500)
 
     try {
-      const { images } = await generateImages({
+      const { images, error } = await generateImages({
         prompt: request.prompt,
         platform: request.aiPlatform,
         aspectRatio: request.aspectRatio,
-        count: 4,
+        count: 1,
       })
+
+      if (error) {
+        setGenerationError('生成失败: ' + error.message)
+        setIsGenerating(false)
+        clearInterval(progressInterval)
+        setProgress(0)
+        setTimeout(() => setGenerationError(null), 8000)
+        return
+      }
 
       const generatedImgs: GeneratedImage[] = images.map((url, index) => ({
         id: `${Date.now()}-${index}`,
@@ -210,6 +228,8 @@ function App() {
       }
     } catch (err) {
       console.error('Generation failed:', err)
+      setGenerationError(err instanceof Error ? err.message : '生成失败，请检查网络连接和API配置')
+      setTimeout(() => setGenerationError(null), 5000)
     } finally {
       clearInterval(progressInterval)
       setProgress(100)
@@ -323,8 +343,17 @@ function App() {
     alert('感谢您的反馈!')
   }
 
+  // Handle history item delete
+  const handleDeleteHistoryItem = async (image: GeneratedImage) => {
+    if (window.confirm('确定要删除这条历史记录吗？')) {
+      await deleteGenerationHistory(image.id, user?.id)
+      setHistory(prev => prev.filter(item => item.id !== image.id))
+    }
+  }
+
   // Handle template apply
   const handleApplyTemplate = (template: Template) => {
+    templateAppliedRef.current = true
     setRequest({
       ...initialRequest,
       contentType: template.contentType,
@@ -400,6 +429,7 @@ function App() {
           
           {/* User Menu */}
           <div className="flex items-center gap-3">
+            <ThemeToggle />
             {!isConfigured && (
               <span className="text-caption text-warning bg-warning/20 px-2 py-1 rounded">
                 演示模式
@@ -467,14 +497,12 @@ function App() {
                 {/* Prompt Preview - Right */}
                 <div className="lg:col-span-2">
                   <PromptPreview
-                    platforms={brandData.ai_platforms}
-                    selectedPlatform={request.aiPlatform}
-                    onPlatformChange={handlePlatformChange}
                     prompt={request.prompt}
                     onPromptChange={handlePromptChange}
                     onGenerate={handleGenerate}
                     onSaveTemplate={handleSaveTemplate}
                     isGenerating={isGenerating}
+                    modelName={activeGenerator?.id === 'custom-api' ? (activeGenerator.config?.model || 'dall-e-3') : undefined}
                   />
                 </div>
               </div>
@@ -489,8 +517,8 @@ function App() {
                   onDownload={handleDownload}
                   onVariation={handleVariation}
                   onFavorite={handleFavorite}
-                  onPackageDownload={handlePackageDownload}
                   onFeedback={handleFeedback}
+                  error={generationError}
                 />
               </div>
             </div>
@@ -635,10 +663,11 @@ function App() {
                 </div>
               ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                  {history.map(image => (
+                  {history.map((image, index) => (
                     <div
                       key={image.id}
-                      className="group bg-neutral-100 rounded-lg overflow-hidden border border-neutral-300 hover:border-neutral-400 transition-all"
+                      className="group bg-neutral-100 rounded-lg overflow-hidden border border-neutral-300 hover:border-neutral-400 transition-all animate-fade-in-up"
+                      style={{ animationDelay: `${index * 50}ms`, animationFillMode: 'backwards' }}
                     >
                       <div className="aspect-square bg-neutral-200 relative">
                         <img
@@ -646,12 +675,22 @@ function App() {
                           alt="Generated"
                           className="w-full h-full object-cover"
                         />
-                        <button
-                          onClick={() => handleDownload(image)}
-                          className="absolute top-2 right-2 w-8 h-8 rounded-lg bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                        >
-                          <Download className="w-4 h-4" />
-                        </button>
+                        <div className="absolute top-2 right-2 flex flex-col gap-2">
+                          <button
+                            onClick={() => handleDownload(image)}
+                            className="w-8 h-8 rounded-lg bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            title="下载"
+                          >
+                            <Download className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteHistoryItem(image)}
+                            className="w-8 h-8 rounded-lg bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                            title="删除"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                       <div className="p-3">
                         <p className="text-caption text-neutral-500 line-clamp-2 mb-2">
@@ -672,40 +711,72 @@ function App() {
           {activeTab === 'settings' && (
             <div>
               <h1 className="text-h1 text-neutral-600 mb-6">设置</h1>
-              <div className="bg-neutral-100 rounded-lg border border-neutral-300 p-6 max-w-2xl">
-                <h2 className="text-h3 text-neutral-600 mb-4">API配置</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-small font-medium text-neutral-600 mb-2">
-                      Supabase URL
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="https://your-project.supabase.co"
-                      className="w-full input-field"
-                      disabled
-                      value={import.meta.env.VITE_SUPABASE_URL || '未配置'}
-                    />
+              <div className="space-y-6 max-w-2xl">
+                {/* Generator Settings */}
+                <div className="bg-neutral-100 rounded-lg border border-neutral-300 p-6">
+                  <ImageGeneratorSettings
+                    onTestResult={(msg) => {
+                      setGenTestResult(msg)
+                      setTimeout(() => setGenTestResult(null), 5000)
+                    }}
+                  />
+                </div>
+
+                {/* Test result toast */}
+                {genTestResult && (
+                  <div className="bg-neutral-100 rounded-lg border border-neutral-300 p-4">
+                    <p className="text-small text-neutral-600">{genTestResult}</p>
                   </div>
-                  <div>
-                    <label className="block text-small font-medium text-neutral-600 mb-2">
-                      API 状态
-                    </label>
-                    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-small ${
-                      isSupabaseConfigured()
-                        ? 'bg-success/20 text-success'
-                        : 'bg-warning/20 text-warning'
-                    }`}>
-                      <div className={`w-2 h-2 rounded-full ${
-                        isSupabaseConfigured() ? 'bg-success' : 'bg-warning'
-                      }`} />
-                      {isSupabaseConfigured() ? '已连接' : '演示模式'}
+                )}
+
+                {/* API Config */}
+                <div className="bg-neutral-100 rounded-lg border border-neutral-300 p-6">
+                  <h2 className="text-h3 text-neutral-600 mb-4">API配置</h2>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-small font-medium text-neutral-600 mb-2">
+                        Supabase URL
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="https://your-project.supabase.co"
+                        className="w-full input-field"
+                        disabled
+                        value={import.meta.env.VITE_SUPABASE_URL || '未配置'}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-small font-medium text-neutral-600 mb-2">
+                        API 状态
+                      </label>
+                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-small ${
+                        isSupabaseConfigured()
+                          ? 'bg-success/20 text-success'
+                          : 'bg-warning/20 text-warning'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                          isSupabaseConfigured() ? 'bg-success' : 'bg-warning'
+                        }`} />
+                        {isSupabaseConfigured() ? '已连接' : '演示模式'}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-small font-medium text-neutral-600 mb-2">
+                        当前图片生成服务
+                      </label>
+                      <p className="text-small text-neutral-500">
+                        {activeGenerator?.id === 'pollinations'
+                          ? 'Pollinations.ai（免费，无需API密钥）'
+                          : activeGenerator?.id === 'custom-api'
+                            ? `自定义API${activeGenerator.config?.endpoint ? ` - ${activeGenerator.config.endpoint}` : '（未配置）'}`
+                            : `${activeGenerator?.id || '未知'}`}
+                      </p>
                     </div>
                   </div>
                 </div>
 
                 {user && (
-                  <div className="mt-8 pt-6 border-t border-neutral-300">
+                  <div className="bg-neutral-100 rounded-lg border border-neutral-300 p-6">
                     <h2 className="text-h3 text-neutral-600 mb-4">账户信息</h2>
                     <div className="space-y-2">
                       <p className="text-small text-neutral-500">
@@ -718,7 +789,7 @@ function App() {
                   </div>
                 )}
 
-                <div className="mt-8 pt-6 border-t border-neutral-300">
+                <div className="bg-neutral-100 rounded-lg border border-neutral-300 p-6">
                   <h2 className="text-h3 text-neutral-600 mb-4">关于</h2>
                   <p className="text-small text-neutral-500">
                     AI设计师工作台 v1.0.0<br />

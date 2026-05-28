@@ -1,5 +1,5 @@
 {
-  "name": "react_repo",
+  "name": "ai-designer-platform",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -10,7 +10,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "install-deps": "npm install",
-    "clean": "rm -rf node_modules"
+    "clean": "node -e \"fs.rmSync('node_modules',{recursive:true,force:true})\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

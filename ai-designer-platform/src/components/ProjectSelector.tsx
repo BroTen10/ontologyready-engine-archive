@@ -180,7 +180,7 @@ export function ProjectSelector({ projects, selectedProject, onSelect, onDelete,
             {selectedProject.brand_profile.restrictions.length > 0 && (
               <div className="mt-3 pt-3 border-t border-neutral-300">
                 <p className="text-caption text-warning">
-                  注意: {selectedProject.brand_profile.restrictions[0]}
+                  注意: {selectedProject.brand_profile.restrictions[0] ?? ''}
                 </p>
               </div>
             )}

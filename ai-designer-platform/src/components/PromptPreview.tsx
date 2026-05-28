@@ -1,34 +1,22 @@
 import { useState } from 'react'
 import { Copy, Check, Sparkles, Save, Loader2 } from 'lucide-react'
-import type { AIPlatform } from '@/types'
 
 interface PromptPreviewProps {
-  platforms: AIPlatform[]
-  selectedPlatform: string
-  onPlatformChange: (platform: string) => void
   prompt: string
   onPromptChange: (prompt: string) => void
   onGenerate: () => void
   onSaveTemplate: () => void
   isGenerating: boolean
-}
-
-const platformIcons: Record<string, string> = {
-  dalle: 'D',
-  midjourney: 'M',
-  'stable-diffusion': 'S',
-  tongyi: 'T',
+  modelName?: string
 }
 
 export function PromptPreview({
-  platforms,
-  selectedPlatform,
-  onPlatformChange,
   prompt,
   onPromptChange,
   onGenerate,
   onSaveTemplate,
   isGenerating,
+  modelName,
 }: PromptPreviewProps) {
   const [copied, setCopied] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
@@ -45,25 +33,12 @@ export function PromptPreview({
 
   return (
     <div className="bg-neutral-100 rounded-lg border border-neutral-300 overflow-hidden sticky top-20">
-      {/* Platform Tabs */}
-      <div className="flex p-1 bg-neutral-200 m-3 rounded-lg">
-        {platforms.map(platform => (
-          <button
-            key={platform.id}
-            onClick={() => onPlatformChange(platform.id)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-md text-small font-medium transition-all duration-200 ${
-              selectedPlatform === platform.id
-                ? 'bg-neutral-100 text-neutral-600 shadow-sm'
-                : 'text-neutral-500 hover:text-neutral-600'
-            }`}
-          >
-            <span className="w-5 h-5 rounded bg-gradient-to-br from-primary-500 to-secondary-500 text-white text-caption flex items-center justify-center font-bold">
-              {platformIcons[platform.id] || platform.name[0]}
-            </span>
-            <span className="hidden sm:inline">{platform.name}</span>
-          </button>
-        ))}
-      </div>
+      {/* Model Name Indicator */}
+      {modelName && (
+        <div className="mx-3 mt-3 px-3 py-1.5 bg-neutral-200 rounded-lg text-caption text-neutral-500 inline-block">
+          当前模型: {modelName}
+        </div>
+      )}
 
       {/* Prompt Preview */}
       <div className="px-4 pb-4">

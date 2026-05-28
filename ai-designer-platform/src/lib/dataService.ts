@@ -1,5 +1,6 @@
 import { supabase, isSupabaseConfigured } from './supabase'
-import type { GeneratedImage, Template } from '@/types'
+import type { Template } from '@/types'
+import { getAllGenerators, generateWithGenerator } from './imageGenerators'
 
 // Generation History Service
 export async function saveGenerationHistory(data: {
@@ -70,6 +71,31 @@ export async function clearGenerationHistory(userId?: string) {
   let query = supabase
     .from('generation_history')
     .delete()
+
+  if (userId) {
+    query = query.eq('user_id', userId)
+  }
+
+  const { error } = await query
+
+  return { error }
+}
+
+export async function deleteGenerationHistory(imageId: string, userId?: string) {
+  if (!isSupabaseConfigured()) {
+    console.log('Demo mode: Skipping delete from database')
+    return { error: null }
+  }
+
+  // Extract the actual record ID from the imageId (format: recordId-index)
+  // The recordId may be a UUID containing dashes, so we remove only the trailing -index suffix
+  const lastDashIndex = imageId.lastIndexOf('-')
+  const recordId = lastDashIndex > 0 ? imageId.substring(0, lastDashIndex) : imageId
+
+  let query = supabase
+    .from('generation_history')
+    .delete()
+    .eq('id', recordId)
 
   if (userId) {
     query = query.eq('user_id', userId)
@@ -178,46 +204,31 @@ export async function deleteUserTemplate(templateId: string, userId: string) {
   }
 }
 
-// Get image dimensions based on aspect ratio
-function getImageDimensions(aspectRatio: string): { width: number, height: number } {
-  switch (aspectRatio) {
-    case '16:9': return { width: 1792, height: 1024 }
-    case '9:16': return { width: 1024, height: 1792 }
-    case '3:4': return { width: 768, height: 1024 }
-    case '4:3': return { width: 1024, height: 768 }
-    case '1:1':
-    default: return { width: 1024, height: 1024 }
-  }
-}
-
-// Generate AI images using Pollinations.ai (free, no API key required)
-async function generateWithPollinations(prompt: string, aspectRatio: string, count: number): Promise<string[]> {
-  const { width, height } = getImageDimensions(aspectRatio)
-  const images: string[] = []
-  
-  for (let i = 0; i < count; i++) {
-    // Add unique seed to get different variations
-    const uniquePrompt = `${prompt}, variation ${i + 1}, seed:${Date.now() + i}`
-    const encodedPrompt = encodeURIComponent(uniquePrompt)
-    // Pollinations.ai provides free AI image generation with FLUX model
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&nologo=true&seed=${Date.now() + i}`
-    images.push(imageUrl)
-  }
-  
-  return images
-}
-
-// AI Image Generation Service
+// AI Image Generation Service (uses configurable backend from SettingsContext)
 export async function generateImages(params: {
   prompt: string
   platform: string
   aspectRatio: string
   count?: number
 }): Promise<{ images: string[], error: Error | null }> {
-  const count = params.count || 4
-  
-  // Try to use Supabase Edge Function if configured
-  if (isSupabaseConfigured()) {
+  const count = params.count || 1
+
+  // Read active generator from localStorage (set by SettingsContext)
+  let generatorId = 'pollinations'
+  let generatorConfig: { config: Record<string, string> } | undefined
+  try {
+    const raw = localStorage.getItem('ai-designer-settings')
+    if (raw) {
+      const settings = JSON.parse(raw)
+      generatorId = settings.activeGeneratorId || 'pollinations'
+      generatorConfig = settings.generators?.find((g: { id: string }) => g.id === generatorId)
+    }
+  } catch {
+    // ignore, use defaults
+  }
+
+  // Only try Supabase Edge Function when using default Pollinations generator
+  if (generatorId === 'pollinations' && isSupabaseConfigured()) {
     try {
       const { data, error } = await supabase.functions.invoke('generate-image', {
         body: {
@@ -236,21 +247,22 @@ export async function generateImages(params: {
     }
   }
 
-  // Use Pollinations.ai for real AI image generation (free, no API key)
-  // This works in both demo mode and as fallback
-  console.log('Using Pollinations.ai for AI image generation')
-  
-  try {
-    const images = await generateWithPollinations(params.prompt, params.aspectRatio, count)
-    return { images, error: null }
-  } catch (err) {
-    console.error('Pollinations error:', err)
+  const result = await generateWithGenerator(generatorId, {
+    prompt: params.prompt,
+    aspectRatio: params.aspectRatio,
+    count,
+  }, generatorConfig)
+
+  if (result.error) {
+    console.error(`${generatorId} error:`, result.error)
     // Ultimate fallback to placeholder images
-    const images = Array.from({ length: count }, (_, i) => 
+    const images = Array.from({ length: count }, (_, i) =>
       `https://picsum.photos/seed/${Date.now() + i}/800/800`
     )
-    return { images, error: err as Error }
+    return { images, error: result.error }
   }
+
+  return { images: result.images, error: null }
 }
 
 // Preset Templates (from database or static)
