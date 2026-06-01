@@ -1,0 +1,469 @@
+{
+  "version": "1.0.0",
+  "tasks": [
+    {
+      "id": 1,
+      "title": "数据库：4 张核心表 DDL + init.sql",
+      "description": "创建 4 张核心表 DDL（ontology_types, ontology_objects, ontology_links, ontology_actions_log），包含所有索引、生成列、外键约束、CHECK 约束和 JSONB COMPRESSION。同时编写 init.sql 初始化脚本。",
+      "status": "pending",
+      "dependencies": [],
+      "priority": "high",
+      "details": "参考 PRD 4.1 节完整 DDL。ontology_types（api_name PK, type CHECK, config JSONB, maturity）、ontology_objects（UUID PK, object_type FK, external_id, dataset_id, display_name GENERATED ALWAYS, properties JSONB LZ4, embedding VECTOR）、ontology_links（UUID PK, link_type FK, source_id FK, target_id FK, dataset_id, properties JSONB LZ4, confidence）、ontology_actions_log（UUID PK, action_type, parameters, status CHECK, before/after_snapshot, executed_by, executed_at）。所有索引：GIN on properties, B-tree on foreign keys, composite on dataset_id+type。",
+      "testStrategy": "运行 init.sql 验证所有表创建成功，检查索引和约束。",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Create ontology_types table DDL",
+          "description": "Write DDL for ontology_types with primary key, CHECK constraints, JSONB compression, and indexes.",
+          "dependencies": [],
+          "details": "Table must have api_name VARCHAR(100) PRIMARY KEY, type VARCHAR(20) CHECK (type IN ('OBJECT', 'LINK', 'ACTION')), config JSONB with LZ4 compression, maturity VARCHAR(20) DEFAULT 'DRAFT' CHECK (maturity IN ('DRAFT', 'ACTIVE', 'DEPRECATED')). Create GIN index on config, B-tree index on type. Ensure type check constraint.",
+          "status": "pending",
+          "testStrategy": "Execute DDL manually and verify table structure, constraints, and indexes using \\d ontology_types."
+        },
+        {
+          "id": 2,
+          "title": "Create ontology_objects table DDL",
+          "description": "Write DDL for ontology_objects with UUID PK, foreign key, generated column, JSONB LZ4, vector column, and all indexes.",
+          "dependencies": [],
+          "details": "Table: id UUID PRIMARY KEY DEFAULT gen_random_uuid(), object_type VARCHAR(100) REFERENCES ontology_types(api_name), external_id VARCHAR(500), dataset_id VARCHAR(100), display_name TEXT GENERATED ALWAYS AS (properties->>'name') STORED, properties JSONB with LZ4 compression, embedding VECTOR(384). Indexes: GIN on properties, B-tree on object_type, external_id, dataset_id, composite index on (dataset_id, object_type).",
+          "status": "pending",
+          "testStrategy": "Execute DDL and verify generated column behavior, foreign key, and indexes."
+        },
+        {
+          "id": 3,
+          "title": "Create ontology_links table DDL",
+          "description": "Write DDL for ontology_links with UUID PK, foreign keys, JSONB LZ4, confidence, and indexes.",
+          "dependencies": [],
+          "details": "Table: id UUID PRIMARY KEY DEFAULT gen_random_uuid(), link_type VARCHAR(100) NOT NULL REFERENCES ontology_types(api_name), source_id UUID NOT NULL REFERENCES ontology_objects(id), target_id UUID NOT NULL REFERENCES ontology_objects(id), dataset_id VARCHAR(100), properties JSONB with LZ4 compression, confidence REAL CHECK (confidence >= 0 AND confidence <= 1). Indexes: GIN on properties, B-tree on link_type, source_id, target_id, dataset_id, composite on (dataset_id, link_type).",
+          "status": "pending",
+          "testStrategy": "Execute DDL and verify foreign keys, check constraint, and indexes."
+        },
+        {
+          "id": 4,
+          "title": "Create ontology_actions_log table DDL",
+          "description": "Write DDL for ontology_actions_log with UUID PK, CHECK, snapshots, and indexes.",
+          "dependencies": [],
+          "details": "Table: id UUID PRIMARY KEY DEFAULT gen_random_uuid(), action_type VARCHAR(100) NOT NULL, parameters JSONB, status VARCHAR(20) CHECK (status IN ('SUCCESS', 'FAILED', 'PENDING')), before_snapshot JSONB, after_snapshot JSONB, executed_by VARCHAR(200), executed_at TIMESTAMPTZ DEFAULT now(). Indexes: B-tree on action_type, executed_by, executed_at; GIN on parameters, before_snapshot, after_snapshot.",
+          "status": "pending",
+          "testStrategy": "Execute DDL and verify check constraint and indexes."
+        },
+        {
+          "id": 5,
+          "title": "Combine DDLs into init.sql and validate",
+          "description": "Assemble all four DDL scripts into a single init.sql file, add necessary extensions (pgvector, plpgsql etc.), and run validation tests.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "details": "Create init.sql that includes: CREATE EXTENSION IF NOT EXISTS vector; CREATE EXTENSION IF NOT EXISTS pgcrypto; then all four CREATE TABLE statements with constraints and indexes. Order tables by dependencies: ontology_types first, then ontology_objects, then ontology_links, then ontology_actions_log. Add comments. Validate by running init.sql against a test database and checking all 4 tables, constraints, and indexes exist.",
+          "status": "pending",
+          "testStrategy": "Run init.sql in a fresh database, then run validation queries: SELECT table_name FROM information_schema.tables WHERE table_schema='public'; Check constraints, indexes, and foreign keys. Optionally insert sample data to verify integrity."
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "API：项目框架搭建 + 健康检查",
+      "description": "搭建后端框架（Node.js Fastify 或 Python FastAPI），配置数据库连接，实现健康检查端点 GET /health。",
+      "status": "pending",
+      "dependencies": [
+        1
+      ],
+      "priority": "high",
+      "details": "建议 FastAPI（Python）或 Fastify（Node.js）。选择 FastAPI 以获得更好的异步支持和类型安全。数据库连接池配置（pgbouncer 可选）。健康检查返回 {status: 'ok', timestamp, db: 'connected'}。",
+      "testStrategy": "启动服务后 curl /health 返回 200。",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Initialize FastAPI project structure and dependencies",
+          "description": "Create the backend project directory, set up virtual environment, install FastAPI, uvicorn, async database driver (asyncpg), and other dependencies.",
+          "dependencies": [],
+          "details": "Create requirements.txt or pyproject.toml. Include fastapi, uvicorn[standard], asyncpg, pydantic-settings, and python-dotenv. Create app/ directory with __init__.py and main.py.",
+          "status": "pending",
+          "testStrategy": null
+        },
+        {
+          "id": 2,
+          "title": "Configure database connection pool",
+          "description": "Implement async database connection pool using asyncpg or SQLAlchemy async. Load credentials from environment variables. Provide a function to get the pool and a test connection function.",
+          "dependencies": [
+            1
+          ],
+          "details": "Use asyncpg.create_pool with min_size=5, max_size=20. Create a module app/database.py. Handle optional pgbouncer configuration. Validate connection on startup.",
+          "status": "pending",
+          "testStrategy": "Write a unit test that verifies the pool creation and a test query (e.g., SELECT 1)."
+        },
+        {
+          "id": 3,
+          "title": "Implement GET /health endpoint",
+          "description": "Create a FastAPI route that returns health status including server time and database connectivity.",
+          "dependencies": [
+            1,
+            2
+          ],
+          "details": "Define async function health_check in app/main.py or a separate router. Query database (SELECT 1) to verify connection. Return JSON: {status: 'ok', timestamp: current ISO datetime, db: 'connected'}. Handle DB failure gracefully (status: 'error', db: 'disconnected').",
+          "status": "pending",
+          "testStrategy": "Use TestClient from FastAPI to call /health and assert 200 response with correct JSON structure."
+        },
+        {
+          "id": 4,
+          "title": "Add application configuration management",
+          "description": "Implement configuration loading from environment variables using pydantic-settings. Define Settings class with database URL, host, port, etc.",
+          "dependencies": [
+            1
+          ],
+          "details": "Create app/config.py with class Settings inheriting from BaseSettings. Include DATABASE_URL, DB_POOL_MIN, DB_POOL_MAX, HOST, PORT. Use python-dotenv to load .env file.",
+          "status": "pending",
+          "testStrategy": "Write a test that reads default values from .env.test and validates them."
+        },
+        {
+          "id": 5,
+          "title": "Create startup verification and integration test",
+          "description": "Add startup event to verify database connection and create a simple integration test script that starts the server and checks /health endpoint manually.",
+          "dependencies": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "details": "In app/main.py, add @app.on_event('startup') to test DB connection; if fails, log warning. Create a tests/test_health.py with TestClient and pytest. Provide instructions in README for manual test with curl.",
+          "status": "pending",
+          "testStrategy": "Run pytest tests/ to verify health endpoint returns 200 and DB connected."
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "API：API Key 认证中间件",
+      "description": "实现 API Key 认证中间件，所有请求需携带 X-API-Key 请求头，无 Key 或错误返回 401。API Key 通过环境变量注入，首次启动未配置时自动生成 UUID。",
+      "status": "pending",
+      "dependencies": [
+        2
+      ],
+      "priority": "high",
+      "details": "中间件拦截所有 /api/v1/* 请求。从环境变量 API_KEY 读取，未配置时生成 UUID 并打印到日志。错误响应格式遵循统一定义（UNAUTHORIZED 错误码）。控制台前端通过 VITE_API_KEY 注入。MVP 单一 Key，无用户概念。",
+      "testStrategy": "不带 Key 请求返回 401；错误 Key 返回 401；正确 Key 正常通过。"
+    },
+    {
+      "id": 4,
+      "title": "API：统一错误响应规范",
+      "description": "实现统一错误响应规范（RFC 9457），返回 JSON 格式 {error: {code, message, details, request_id}}。包含所有错误码。",
+      "status": "pending",
+      "dependencies": [
+        2
+      ],
+      "priority": "high",
+      "details": "错误码：VALIDATION_ERROR(400), INVALID_JSON(400), UNAUTHORIZED(401), NOT_FOUND(404), CONFLICT(409), BUSINESS_RULE_ERROR(422), INTERNAL_ERROR(500)。每次请求生成唯一 request_id 并写入日志。details 字段为可选数组，用于字段级校验错误。",
+      "testStrategy": "触发各类错误场景，验证响应格式和状态码。"
+    },
+    {
+      "id": 5,
+      "title": "API：类型定义 CRUD",
+      "description": "实现类型定义的完整 CRUD API：列表、创建、详情、更新、删除、属性编辑。",
+      "status": "pending",
+      "dependencies": [
+        1,
+        2
+      ],
+      "priority": "high",
+      "details": "端点：GET /api/v1/types（支持 ?type=OBJECT|LINK|ACTION 过滤）、POST /api/v1/types（验证 config JSONB schema）、GET /api/v1/types/:apiName、PUT /api/v1/types/:apiName、DELETE /api/v1/types/:apiName（检查是否被实例引用，有引用返回 BUSINESS_RULE_ERROR）、PATCH /api/v1/types/:apiName/properties。config 校验规则参见 PRD 4.1.1。",
+      "testStrategy": "CRUD 全流程测试 + 重复 api_name 冲突测试 + 删除被引用类型测试。"
+    },
+    {
+      "id": 6,
+      "title": "API：对象实例 CRUD + 搜索",
+      "description": "实现对象实例 CRUD + 搜索 API：分页列表、创建、详情、更新、删除、全文搜索。",
+      "status": "pending",
+      "dependencies": [
+        1,
+        2
+      ],
+      "priority": "high",
+      "details": "端点：GET /api/v1/objects（?type=xxx&dataset=xxx&page=1&size=20）、POST /api/v1/objects（验证 object_type 存在，properties 存入 JSONB）、GET /api/v1/objects/:id、PUT /api/v1/objects/:id（检查 readOnly 配置）、DELETE /api/v1/objects/:id（级联删除关联链接）、GET /api/v1/objects/search?q=xxx（使用 GIN 索引搜索 JSONB）。",
+      "testStrategy": "CRUD + 分页 + 搜索 + readOnly 保护测试。"
+    },
+    {
+      "id": 7,
+      "title": "API：链接 CRUD",
+      "description": "实现链接管理 API：列表（支持 dataset 过滤）、创建、删除。",
+      "status": "pending",
+      "dependencies": [
+        1,
+        2
+      ],
+      "priority": "high",
+      "details": "端点：GET /api/v1/links（?dataset=xxx 过滤）、POST /api/v1/links（验证 source_id 和 target_id 存在、link_type 有效）、DELETE /api/v1/links/:id。创建时校验 link_type config 中的 sourceType/targetType 约束。",
+      "testStrategy": "创建链接、验证外键约束、删除链接。",
+      "subtasks": [
+        {
+          "id": 1,
+          "title": "Define link data models, validation schemas, and database queries",
+          "description": "Set up data models, request/response schemas, and database query functions for link CRUD operations, including link_type config constraint validation.",
+          "dependencies": [],
+          "details": "Create Pydantic models for link requests and responses. Implement helper functions to validate that source_id and target_id exist in ontology_objects, link_type exists in ontology_types, and that the link_type config's sourceType/targetType match the actual object types. Prepare database query functions for inserting, selecting (with optional dataset filter), and deleting links.",
+          "status": "pending",
+          "testStrategy": null
+        },
+        {
+          "id": 2,
+          "title": "Implement GET /api/v1/links endpoint with dataset filtering",
+          "description": "Build the route handler for listing links, optionally filtered by ?dataset=xxx query parameter.",
+          "dependencies": [
+            1
+          ],
+          "details": "Create a FastAPI route GET /api/v1/links that accepts an optional 'dataset' query parameter. Use the database query function to fetch all links, filtering by dataset_id if provided. Return the list of links with appropriate fields. Handle missing data gracefully.",
+          "status": "pending",
+          "testStrategy": null
+        },
+        {
+          "id": 3,
+          "title": "Implement POST /api/v1/links with full validation",
+          "description": "Create the endpoint to add a new link, performing all required validations before insertion.",
+          "dependencies": [
+            1
+          ],
+          "details": "Build POST /api/v1/links route. Accept JSON body with source_id, target_id, link_type, dataset_id, properties (optional), confidence (optional). Validate that source and target objects exist, link_type is valid, and that the link_type config's sourceType and targetType match the actual object types. On validation failure, return appropriate error responses. On success, insert into ontology_links and return the created link.",
+          "status": "pending",
+          "testStrategy": null
+        },
+        {
+          "id": 4,
+          "title": "Implement DELETE /api/v1/links/:id endpoint",
+          "description": "Create the endpoint to delete a link by its unique ID.",
+          "dependencies": [
+            1
+          ],
+          "details": "Build DELETE /api/v1/links/{id} route. Check if the link with the given ID exists in ontology_links. If not, return 404. If it exists, delete it and return a success confirmation. Use the database query function for deletion.",
+          "status": "pending",
+          "testStrategy": null
+        },
+        {
+          "id": 5,
+          "title": "Write integration tests for link CRUD operations",
+          "description": "Develop comprehensive tests covering all link endpoints with valid and invalid scenarios.",
+          "dependencies": [
+            2,
+            3,
+            4
+          ],
+          "details": "Write tests using pytest and FastAPI TestClient. Test cases: GET /links returns list (empty and filtered); POST /links with valid data creates a link (verify database); POST with non-existent source returns error; POST with mismatched types returns error; DELETE existing link returns success and removes from DB; DELETE non-existent ID returns 404. Ensure API key is included in test requests.",
+          "status": "pending",
+          "testStrategy": "Run automated tests to verify all link API behaviors, including validation, error handling, and successful operations."
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "API：图谱端点（结构图谱 + 实体图谱）",
+      "description": "实现图谱 API：类型级结构图谱和实例级实体图谱（含递归 CTE 图遍历）。",
+      "status": "pending",
+      "dependencies": [
+        5,
+        6,
+        7
+      ],
+      "priority": "high",
+      "details": "GET /api/v1/graph/structure：返回 {nodes: [{id, label, apiName, type, color, propertyCount}], edges: [{id, source, target, label, relationship}]}。GET /api/v1/graph/entities：支持 ?dataset=xxx，使用递归 CTE 实现 2-3 跳图遍历。",
+      "testStrategy": "验证图谱节点和边数量，测试不同层级遍历。"
+    },
+    {
+      "id": 9,
+      "title": "API：动作执行 + 历史日志",
+      "description": "实现动作执行和历史审计 API。",
+      "status": "pending",
+      "dependencies": [
+        5,
+        6
+      ],
+      "priority": "medium",
+      "details": "POST /api/v1/actions/:actionName：读取 action_type config，验证必填参数，原子执行（一个 PG 事务），记录 before_snapshot 和 after_snapshot 到 ontology_actions_log。GET /api/v1/actions/history：分页查询，按 executed_at DESC 排序。",
+      "testStrategy": "执行成功和失败动作，验证日志记录和 before/after snapshot。"
+    },
+    {
+      "id": 10,
+      "title": "API：行业模板（列表/详情/分析/导入）",
+      "description": "实现行业模板 API：模板列表、详情、LLM 映射分析入口（MVP 预留）、导入执行。",
+      "status": "pending",
+      "dependencies": [
+        5
+      ],
+      "priority": "medium",
+      "details": "GET /api/v1/templates：返回模板列表 [{id, name, description, tags, stats}]。GET /api/v1/templates/:id：返回模板完整定义（objectTypes, linkTypes, actionTypes）。POST /api/v1/templates/:id/analyze：LLM 映射分析入口，MVP 阶段返回空（Phase 2 对接 OpenAI/通义千问）。POST /api/v1/templates/:id/apply：批量创建类型定义和属性。",
+      "testStrategy": "模板列表、详情、导入流程测试。"
+    },
+    {
+      "id": 11,
+      "title": "API：数据集管理 + 系统统计",
+      "description": "实现数据集 API 和系统统计概览 API。",
+      "status": "pending",
+      "dependencies": [
+        1,
+        2
+      ],
+      "priority": "medium",
+      "details": "GET /api/v1/datasets：查询所有不重复的 dataset_id。POST /api/v1/datasets：注册新 dataset（body: {id, label}），存储方式可简化（利用 ontology_objects 的 DISTINCT dataset_id）。GET /api/v1/stats：返回 {objectCount, linkCount, typeCount, datasetCount, actionsToday}。",
+      "testStrategy": "创建数据集、查询列表、验证统计数据准确性。"
+    },
+    {
+      "id": 12,
+      "title": "前端：项目框架搭建 + 全局配置",
+      "description": "搭建前端项目：React 18 + Vite + TypeScript，集成所有核心依赖，实现全局 API Key 注入。",
+      "status": "pending",
+      "dependencies": [],
+      "priority": "high",
+      "details": "技术栈：React 18 + Vite + TypeScript + Ant Design 5 + React Flow (xyflow) + React Router 6 + TanStack React Query + Axios + pnpm。实现 ApiKeyProvider 组件：Axios 请求拦截器从环境变量 VITE_API_KEY 读取并注入 X-API-Key 请求头，响应拦截器统一处理 401。配置 React Query 默认选项（staleTime, retry）。配置 Vite 代理（/api → localhost:8000）。",
+      "testStrategy": "启动前端项目，验证 Axios 请求自动携带 X-API-Key。"
+    },
+    {
+      "id": 13,
+      "title": "前端：整体布局 + 路由 + 导航",
+      "description": "实现整体布局框架、侧边栏导航、顶部栏、路由配置。",
+      "status": "pending",
+      "dependencies": [
+        12
+      ],
+      "priority": "high",
+      "details": "使用 Ant Design Layout 组件：Sider（Logo + 4 项导航菜单：本体图谱/类型定义/实例管理/行业建模）、Header（数据集选择器 Dropdown + 用户头像 Dropdown）、Content（面包屑 + 路由出口）、Footer（版权）。路由：/ → redirect /graph, /graph, /types, /instances, /modeling。数据集选择器切换后通过 React Query 全局状态触发数据刷新。",
+      "testStrategy": "点击导航切换页面，数据集选择器切换触发全局状态更新。"
+    },
+    {
+      "id": 14,
+      "title": "前端：本体图谱页面（React Flow）",
+      "description": "实现本体图谱可视化页面，支持类型级结构和实例级实体两种视图。",
+      "status": "pending",
+      "dependencies": [
+        12,
+        13,
+        8
+      ],
+      "priority": "high",
+      "details": "使用 React Flow 渲染力导向图。节点=ObjectType（显示彩色图标+名称），边=LinkType。功能：布局切换（层次化 dagre/力导向 d3-force/径向）、缩放平移（minZoom/maxZoom）、全屏适应（fitView）。Tab 切换：「结构图谱」（GET /graph/structure）和「实体图谱」（GET /graph/entities?dataset=xxx）。交互：点击节点→跳转 /types?name=xxx，悬停连线→Tooltip 显示 LinkType 名称，右键画布→Dropdown（刷新/聚焦/导出 PNG）。",
+      "testStrategy": "加载图谱数据、验证节点渲染、测试布局切换和交互。"
+    },
+    {
+      "id": 15,
+      "title": "前端：类型定义页面",
+      "description": "实现类型定义管理页面，展示所有 Object/Link/Action 类型。",
+      "status": "pending",
+      "dependencies": [
+        12,
+        13,
+        5
+      ],
+      "priority": "high",
+      "details": "三个 Tab（ObjectType/LinkType/ActionType），每 Tab 内用卡片网格（Ant Design Card.Grid）展示。每张卡片：彩色图标（config.icon）、中文名（display_name）、英文 API Name（api_name）、描述（description）、属性数量、创建时间、成熟度标签（maturity）。操作：编辑（打开 TypeFormModal）、展开详情（Popover/抽屉）、删除（Confirm + 引用检查）。TypeFormModal：基础信息区（api_name, display_name, description, maturity）、属性表格（name/type下拉/required开关/description/删除行）、「JSON 编辑」按钮打开 Monaco/textarea 编辑 config JSONB、「＋添加属性」按钮。",
+      "testStrategy": "创建、编辑、删除类型，验证属性增删改，JSON 编辑模式。"
+    },
+    {
+      "id": 16,
+      "title": "前端：实例管理页面",
+      "description": "实现实例管理页面，包含对象实例、链接实例、Action 历史三个 Tab。",
+      "status": "pending",
+      "dependencies": [
+        12,
+        13,
+        6,
+        7,
+        9
+      ],
+      "priority": "high",
+      "details": "三个 Tab（对象实例/链接实例/Action 历史）。对象实例 Tab：类型筛选器（Select，从 /types 获取）+ 搜索框（Input.Search，触发 /objects/search）+ 表格（Ant Design Table, columns: ID/Type/display_name/Properties 预览缩略/Action 删除，分页 20/页）。链接实例 Tab：表格（Source→Target/LinkType/Properties/删除）。Action 历史 Tab：表格（ActionType/Status/ExecutedBy/ExecutedAt/详情展开）。URL 参数支持：?type=Customer 预设类型筛选。",
+      "testStrategy": "筛选、搜索、分页操作，删除对象/链接/查看 Action 历史。"
+    },
+    {
+      "id": 17,
+      "title": "前端：行业建模页面",
+      "description": "实现行业建模流程页面，含模板选择和导入步骤。",
+      "status": "pending",
+      "dependencies": [
+        12,
+        13,
+        10
+      ],
+      "priority": "medium",
+      "details": "使用 Ant Design Steps 组件实现 ModelingStepper：Step 1 选择模板→Step 2 LLM 映射分析（MVP 显示「即将推出」占位）→Step 3 预览与调整→Step 4 执行导入。Step 1：TemplateCard 列表（Ant Design Card），每卡片显示模板名称、描述、标签、统计（对象/关系/动作数量）。Step 3：展示将要导入的类型定义清单，用户可勾选/取消。Step 4：调用 POST /templates/:id/apply，成功后跳转到类型定义页。",
+      "testStrategy": "选择模板 → 预览 → 导入 → 验证类型定义页出现新类型。"
+    },
+    {
+      "id": 18,
+      "title": "数据：2 个内置行业模板",
+      "description": "创建供应链 ATP 和客户管理 CRM 两个预设模板的 JSON 数据文件。",
+      "status": "pending",
+      "dependencies": [
+        1
+      ],
+      "priority": "medium",
+      "details": "模板1-供应链ATP：12 个对象类型（Customer, Product, SalesOrder, ATPCommitment, ProductionOrder, Inventory, Supplier, PurchaseOrder, Material, Warehouse, LogisticsOrder, BOM）+ 19 个关系类型（belongs_to, contains, triggers, governed_by, supplied_by, sourced_from, stored_in, fulfills, produces, ships_to 等）+ 12 个动作类型（ApproveCommitment, CreateOrder, UpdateInventory, etc.）。模板2-CRM：8 个对象类型（Customer, Lead, Opportunity, Contact, Activity, Order, Product, User）+ 对应关系和动作。所有类型含完整 Description（面向 LLM）、config（颜色/图标/分组）。数据存储为 JSON 文件，在 init.sql 或 seed 脚本中导入。",
+      "testStrategy": "验证模板 JSON 结构完整性，导入后检查类型数量。"
+    },
+    {
+      "id": 19,
+      "title": "部署：Docker Compose 一键部署",
+      "description": "编写 Docker Compose 配置（3 容器）和快速启动文档。",
+      "status": "pending",
+      "dependencies": [
+        1,
+        2,
+        12
+      ],
+      "priority": "high",
+      "details": "docker-compose.yml：services.postgres（pgvector/pgvector:pg16，环境变量 POSTGRES_DB/USER/PASSWORD，volumes pgdata + ./init.sql，healthcheck pg_isready）、services.api（build ./api，port 8000，环境变量 DATABASE_URL + API_KEY，depends_on postgres healthy）、services.console（build ./console，port 3000，环境变量 VITE_API_URL + VITE_API_KEY，depends_on api）。volumes.pgdata。还需要：.env.example（API_KEY 占位）、Dockerfile.api（多阶段构建）、Dockerfile.console（nginx 或 vite preview）。",
+      "testStrategy": "docker-compose up -d，验证 3 容器启动成功，访问 localhost:3000。"
+    },
+    {
+      "id": 20,
+      "title": "数据：种子数据脚本",
+      "description": "编写种子数据脚本，用于演示图谱可视化和实例管理功能。",
+      "status": "pending",
+      "dependencies": [
+        18,
+        6
+      ],
+      "priority": "medium",
+      "details": "创建 seed.sql 或 seed.ts 脚本，插入供应链 ATP 模板的示例数据：5-10 个 Customer、10-15 个 Product、15-20 个 SalesOrder、10-15 个 ATPCommitment、5-8 个 Supplier 等对象实例 + 对应的链接关系。数据应有业务语义（如客户「华东电子」的订单和交期承诺）。脚本支持幂等（INSERT ... ON CONFLICT 或先 TRUNCATE）。",
+      "testStrategy": "运行种子脚本后，通过 API 和前端验证数据展示。"
+    },
+    {
+      "id": 21,
+      "title": "测试：API 集成测试 + E2E 测试",
+      "description": "编写 API 集成测试和前端 E2E 测试，覆盖核心流程。",
+      "status": "pending",
+      "dependencies": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        14,
+        15,
+        16,
+        17
+      ],
+      "priority": "medium",
+      "details": "API 集成测试（vitest 或 pytest）：类型 CRUD 全流程、对象 CRUD + 搜索、链接 CRUD、图谱端点、动作执行+日志、错误码验证、API Key 认证。前端 E2E（Playwright 或 Cypress）：类型创建流程、图谱渲染和交互、实例管理筛选/搜索/分页、模板导入流程。",
+      "testStrategy": "CI 可运行的测试套件。"
+    },
+    {
+      "id": 22,
+      "title": "文档：README + API 文档",
+      "description": "编写项目根目录 README.md 和 API 文档。",
+      "status": "pending",
+      "dependencies": [
+        19
+      ],
+      "priority": "medium",
+      "details": "README.md：项目简介+定位、架构图、快速开始（docker-compose up -d）、技术栈说明、项目结构、配置说明。API 文档：完整端点列表、请求/响应示例、错误码表、认证说明。可考虑集成 Swagger/OpenAPI 自动生成。",
+      "testStrategy": "文档可读性审查，API 示例可执行验证。"
+    }
+  ],
+  "master": {
+    "tasks": [],
+    "metadata": {
+      "created": "2026-06-01T07:46:39.439Z",
+      "updated": "2026-06-01T07:46:39.439Z",
+      "description": "Tasks for master context"
+    }
+  }
+}

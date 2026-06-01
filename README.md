@@ -1,1 +1,40 @@
-网站用户为AI设计师，网站设计目标是方便设计师调用各种AI工具和模型，提供海量可参考的AI应用案例，用模板或者可快速自定义的选项，帮助设计师傻瓜式，快速生成各类AI应用。有两种设计方式，一种是通过提示词生成器工具生成专业的提示词，并按用户需求推荐使用的模型；第二种是简单快速套用成熟案例方案制作智能体
+# OntologyReady
+
+企业级本体管理平台 — 通过 4 张 PostgreSQL 表 + 1 个 REST API + 1 个管理控制台，提供本体建模、图谱可视化、实例管理和行业模板能力。
+
+**一句话定位：** 一个 Docker Compose 命令启动的企业本体管理平台。
+
+## 技术栈
+
+| 层级 | 技术 |
+|------|------|
+| 数据库 | PostgreSQL 16 + pgvector |
+| 后端 | Python FastAPI |
+| 前端 | React 18 + Ant Design + React Flow |
+| 部署 | Docker Compose |
+
+## 快速开始
+
+```bash
+# 配置 API Key
+cp .env.example .env
+# 编辑 .env 填入密钥
+
+# 一键启动
+docker compose up -d
+
+# 打开浏览器
+open http://localhost:3000
+```
+
+## 项目结构
+
+```
+api/          # FastAPI 后端
+console/      # React 前端
+init.sql      # 数据库初始化脚本
+```
+
+## 许可证
+
+MIT

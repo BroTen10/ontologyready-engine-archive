@@ -1,0 +1,822 @@
+# OntologyReady — 产品需求文档 (PRD)
+
+**版本:** v4.2-mvp  
+**状态:** Draft  
+**日期:** 2026-06-01  
+**核心理念:** 4 张 PG 表 + 1 个轻量 API + 1 个管理控制台 = 企业本体引擎
+
+---
+
+## 1. 执行摘要
+
+**OntologyReady** 是一个轻量级企业本体引擎及管理平台。系统构建在 **PostgreSQL 之上**，通过 **4 张核心表 + 1 个 REST API + 1 个管理控制台**，提供企业级的本体建模、图谱可视化、实例管理和行业模板能力——让企业以极低成本拥有自己的"Palantir Lite"。
+
+> **一句话定位：** 一个 Docker Compose 命令启动的企业本体管理平台。
+
+---
+
+## 2. 系统架构
+
+### 2.1 部署架构
+
+\`\`\`
+┌──────────────────────────────────────────────┐
+│              Docker Compose                    │
+│                                                │
+│  ┌──────────────────────┐                     │
+│  │  Container 1:        │                     │
+│  │  PostgreSQL 16       │                     │
+│  │  + pgvector (可选)   │                     │
+│  └──────────┬───────────┘                     │
+│             │                                  │
+│  ┌──────────▼───────────┐                     │
+│  │  Container 2:        │                     │
+│  │  OntologyReady API   │                     │
+│  │  (Node.js/FastAPI)   │                     │
+│  │  - 本体元数据管理    │                     │
+│  │  - 对象 CRUD         │                     │
+│  │  - 图遍历查询        │                     │
+│  │  - 动作执行          │                     │
+│  └──────────┬───────────┘                     │
+│             │                                  │
+│  ┌──────────▼───────────┐                     │
+│  │  Container 3:        │                     │
+│  │  Console (Web UI)    │                     │
+│  │  React + Ant Design  │                     │
+│  │  - 本体图谱          │                     │
+│  │  - 类型定义          │                     │
+│  │  - 实例管理          │                     │
+│  │  - 行业建模          │                     │
+│  └──────────────────────┘                     │
+└──────────────────────────────────────────────┘
+\`\`\`
+
+### 2.2 技术栈
+
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| **数据库** | PostgreSQL 16 + pgvector | 4 张核心表 + 可选向量扩展 |
+| **后端** | Node.js (Fastify) 或 Python (FastAPI) | REST API + 图遍历 + 动作执行 |
+| **前端** | React 18 + Ant Design + React Flow | 管理控制台 + 图谱可视化 |
+| **部署** | Docker Compose | 3 个容器，一键启动 |
+
+---
+
+## 3. 设计原则（行业最佳实践）
+
+### 3.1 Object 设计原则
+
+| # | 原则 | 正确做法 | 错误做法 | 来源 |
+|---|------|----------|----------|------|
+| 1 | **用业务语言命名** | \`Customer\`, \`Order\`, \`Product\` | \`tb_cust_info_v2\`, \`order_data_final\` | Palantir, Microsoft |
+| 2 | **ID 必须是字符串** | \`id VARCHAR PRIMARY KEY\` | \`id SERIAL PRIMARY KEY\` | Palantir 硬规则 |
+| 3 | **独立 id 列** | 即使有唯一业务键，也单独建 id | 直接用业务列当主键 | Palantir |
+| 4 | **不解析 ID** | 业务含义放在显式 Property 中 | 从 \`id.split("_")[0]\` 推断 | Palantir |
+| 5 | **Description 是关键** | 每个 Object/Link/Action 都写描述，AI 的理解入口 | Description 为空 | LOM 研究 2026 |
+| 6 | **最小化属性** | 能从父对象派生的属性不重复存 | 到处冗余存储 | Palantir |
+| 7 | **避免版本号命名** | 原地演进而非新建类型 | \`Customer_v2\`, \`Order_v3_Embedded\` | Palantir |
+| 8 | **标记成熟度** | 每个类型有 Draft / Active / Deprecated | 所有人不知道哪些类型已废弃 | 行业共识 |
+| 9 | **不可编辑即只读** | 不可变数据源的属性标记 readOnly | 允许修改源头数据 | Palantir |
+| 10 | **复合 ID 不哈希** | \`customer_id + "::" + order_id\` | \`sha256(customer_id + order_id)\` | Palantir |
+
+### 3.2 Link 设计原则
+
+| # | 原则 | 说明 |
+|---|------|------|
+| 1 | **有意义的命名** | \`Employee.manager\`, \`Order.belongs_to\` 而非 \`Link1\`, \`Link2\` |
+| 2 | **集合端用复数** | \`department.employees\` 而非 \`department.employee\` |
+| 3 | **不要孤立对象** | 没有链接的对象是设计警告 |
+| 4 | **但不要蜘蛛网** | 无意义的关系比没有更糟 |
+| 5 | **链接可以有属性** | 如 \`雇佣关系\` 可以有 \`startDate\`, \`role\`, \`isPrimary\` |
+| 6 | **外键命名规范** | \`customer_id\`, \`order_id\` 而非 \`cust\`, \`ord\` |
+
+### 3.3 Action 设计原则
+
+| # | 原则 | 说明 |
+|---|------|------|
+| 1 | **单一职责** | \`ApproveOrder\` 而非 \`UpdateOrderEverything\` |
+| 2 | **原子性** | 一个 Action = 一个 PG 事务，全有或全无 |
+| 3 | **审计强制** | 谁、何时、做了什么、变更前后——不可篡改 |
+| 4 | **区分验证层级** | 前端做格式检查，后端做业务规则 |
+| 5 | **幂等性** | 相同参数重复执行结果一致 |
+| 6 | **参数命名用业务语言** | \`orderId\`, \`approver\` 而非 \`param1\`, \`param2\` |
+
+### 3.4 2025-2026 本体设计新趋势
+
+\`\`\`
+传统认知:     Ontology = 语义描述层（描述数据"是什么"）
+2025 新认知:  Ontology = 语义层 + 行动层 + 权限层（AI Agent 的操作接口）
+\`\`\`
+
+| 趋势 | 含义 | 对 OntologyReady 的影响 |
+|------|------|----------------------|
+| **本体即 Agent OS** | AI Agent 通过 Ontology 理解和操作企业数据 | 我们的 Object + Link + Action 三元组正好对齐 |
+| **LLM 辅助建模** | Schema 自省 + LLM 推断 + 人工审核 | Phase 2 功能，已预留接口 |
+| **混合存储胜出** | 核心字段用列，灵活属性用 JSONB + LZ4 | 已采用 hybrid 模式 |
+| **递归 CTE 够用** | < 10 万节点无需图数据库 | MVP 用 CTE，AGE 是后续选项 |
+| **Description 决定 AI 质量** | LLM 本体理解准确度直接依赖 Description | 控制台强制填写 |
+
+
+---
+
+## 4. 核心功能
+
+### 4.1 数据模型（4 张核心表）
+
+采用 **混合存储模式**（Hybrid Storage）：核心字段用原生列（性能 + 约束），灵活属性用 JSONB + LZ4 压缩（弹性 + 快速），频繁查询字段用生成列加速。
+
+**v4.2 变更：** `ontology_objects` 和 `ontology_links` 新增 `dataset_id` 列，支持逻辑隔离多数据集（详见 4.4）。
+
+\`\`\`sql
+-- =============================================
+-- OntologyReady MVP — 4 张核心表
+-- =============================================
+
+-- 1. 本体类型定义（Object / Link / Action）
+CREATE TABLE ontology_types (
+  api_name      VARCHAR(100) PRIMARY KEY,
+  type          VARCHAR(20) NOT NULL CHECK (type IN ('OBJECT', 'LINK', 'ACTION')),
+  display_name  VARCHAR(200) NOT NULL,
+  description   TEXT NOT NULL,             -- 面向 LLM / AI Agent 的关键描述，必填
+  config        JSONB NOT NULL DEFAULT '{}', -- 类型级配置（见 4.1.1 Schema 定义）
+  maturity      VARCHAR(20) DEFAULT 'DRAFT' CHECK (maturity IN ('DRAFT', 'ACTIVE', 'DEPRECATED')),
+  created_at    TIMESTAMPTZ DEFAULT now(),
+  updated_at    TIMESTAMPTZ DEFAULT now()
+);
+
+-- 2. 对象实例（混合存储模式）
+CREATE TABLE ontology_objects (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  object_type     VARCHAR(100) NOT NULL REFERENCES ontology_types(api_name),
+  external_id     VARCHAR(500),
+  dataset_id      VARCHAR(100) NOT NULL DEFAULT 'default',  -- 数据集隔离
+  display_name    TEXT GENERATED ALWAYS AS (properties ->> 'name') STORED,
+  properties      JSONB NOT NULL DEFAULT '{}' COMPRESSION lz4,
+  embedding       VECTOR(384),
+  created_at      TIMESTAMPTZ DEFAULT now(),
+  updated_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_objects_type ON ontology_objects(object_type);
+CREATE INDEX idx_objects_eid ON ontology_objects(object_type, external_id);
+CREATE INDEX idx_objects_props ON ontology_objects USING GIN (properties);
+CREATE INDEX idx_objects_display ON ontology_objects(display_name);
+CREATE INDEX idx_objects_dataset ON ontology_objects(dataset_id, object_type);  -- 数据集查询
+
+-- 3. 关系链接（邻接表模型）
+CREATE TABLE ontology_links (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  link_type       VARCHAR(100) NOT NULL REFERENCES ontology_types(api_name),
+  source_id       UUID NOT NULL REFERENCES ontology_objects(id) ON DELETE CASCADE,
+  target_id       UUID NOT NULL REFERENCES ontology_objects(id) ON DELETE CASCADE,
+  dataset_id      VARCHAR(100) NOT NULL DEFAULT 'default',  -- 数据集隔离
+  properties      JSONB DEFAULT '{}' COMPRESSION lz4,
+  confidence      REAL DEFAULT 1.0,
+  created_at      TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_links_source ON ontology_links(source_id);
+CREATE INDEX idx_links_target ON ontology_links(target_id);
+CREATE INDEX idx_links_type ON ontology_links(link_type);
+CREATE INDEX idx_links_source_type ON ontology_links(source_id, link_type);
+CREATE INDEX idx_links_target_type ON ontology_links(target_id, link_type);
+CREATE INDEX idx_links_dataset ON ontology_links(dataset_id, link_type);  -- 数据集查询
+
+-- 4. 动作审计日志（不可篡改）
+CREATE TABLE ontology_actions_log (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  action_type     VARCHAR(100) NOT NULL,
+  parameters      JSONB NOT NULL,
+  status          VARCHAR(20) NOT NULL CHECK (status IN ('SUCCESS', 'FAILED', 'PENDING')),
+  error_message   TEXT,
+  executed_by     VARCHAR(200) NOT NULL,
+  before_snapshot JSONB,
+  after_snapshot  JSONB,
+  executed_at     TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX idx_actions_log_type ON ontology_actions_log(action_type);
+CREATE INDEX idx_actions_log_time ON ontology_actions_log(executed_at);
+\`\`\`
+
+#### 4.1.1 config 字段 JSONB Schema 定义
+
+`ontology_types.config` 是类型级别的配置字段，不同类型（OBJECT/LINK/ACTION）使用不同子集：
+
+\`\`\`json
+// ── OBJECT 类型的 config ──
+{
+  "color": "#1890ff",        // 图谱节点颜色（十六进制）
+  "icon": "UserOutlined",    // Ant Design 图标名
+  "group": "core",           // 分组标签（用于图谱分层布局，如 core / transaction / reference）
+  "readOnly": false          // true = 该类型实例不允许通过 API 修改（对接只读数据源时使用）
+}
+
+// ── LINK 类型的 config ──
+{
+  "color": "#faad14",
+  "sourceType": "Customer",  // 允许的源对象类型（null = 任意）
+  "targetType": "Order",     // 允许的目标对象类型（null = 任意）
+  "directed": true,          // 是否有方向性（false = 无向关系）
+  "cardinality": "ONE_TO_MANY"  // ONE_TO_ONE | ONE_TO_MANY | MANY_TO_MANY
+}
+
+// ── ACTION 类型的 config ──
+{
+  "targetObjectType": "Order",   // 作用的对象类型
+  "parameters": [
+    {
+      "name": "orderId",
+      "type": "STRING",           // STRING | NUMBER | BOOLEAN | TIMESTAMP | OBJECT_REF
+      "required": true,
+      "description": "目标订单 ID"
+    },
+    {
+      "name": "approver",
+      "type": "STRING",
+      "required": true,
+      "description": "审批人姓名"
+    }
+  ],
+  "validationRules": [           // 可选，前端格式校验规则
+    { "field": "orderId", "pattern": "^ORD-\\d+$", "message": "订单 ID 格式错误" }
+  ]
+}
+\`\`\`
+
+---
+
+### 4.2 控制台功能
+
+控制台是 OntologyReady MVP 的核心交互界面，包含 **4 个主页面**：
+
+#### 4.2.1 本体图谱（首页）
+
+- 以力导向图/层次图可视化展示所有已定义的对象类型及其关系
+- 节点 = ObjectType，边 = LinkType
+- 支持布局算法切换（层次化、力导向、径向）
+- 缩放、平移、全屏适应
+- Tab 切换："结构图谱"（类型级）与"实体图谱"（实例级）
+
+交互逻辑：
+- 点击节点 → 跳转到该对象类型详情页
+- 悬停连线 → 显示 LinkType 名称
+- 右键画布 → 刷新 / 聚焦 / 导出
+
+#### 4.2.2 类型定义
+
+- 卡片网格展示所有注册的类型定义
+- 三个 Tab：ObjectType / LinkType / ActionType
+- 每张卡片显示：彩色图标、中文名、英文 API Name、描述、属性数量、创建时间
+- 支持：编辑、展开详情、删除
+
+**类型定义详情弹窗：**
+
+| 区域 | 内容 |
+|------|------|
+| **基础信息** | 类型名称、描述（必填）、API Name |
+| **属性列表** | 属性名、类型（下拉）、必填开关、描述、删除 |
+| **操作栏** | "JSON 编辑"按钮、"＋添加属性"按钮 |
+| **底部** | 取消 / 确定 |
+
+#### 4.2.3 实例管理
+
+- 三个 Tab：对象实例 / 链接实例 / Action 历史
+- 类型筛选器 + 搜索框
+- 数据表格：ID | Type | Properties 预览 | Action（删除）
+- 分页：默认 20 条/页
+
+#### 4.2.4 行业建模
+
+- 流程步骤条：选择模板 → LLM 映射分析 → 预览与调整 → 执行
+- 模板卡片列表，显示对象类型数 / 关系类型数 / 动作类型数
+
+---
+
+### 4.3 整体页面结构
+
+\`\`\`
+┌──────────────────────────────────────────────────┐
+│ Logo  OntologyReady    [数据集选择器 ▼]  admin ▼  │  ← 顶部导航
+├──────────┬───────────────────────────────────────┤
+│          │  面包屑: 本体引擎 / 当前页面            │
+│  本体图谱  │  ─────────────────────────────────    │
+│          │                                       │
+│  类型定义  │       主内容区                         │
+│          │                                       │
+│  实例管理  │  (图谱 / 卡片列表 / 表格 / 弹窗)      │
+│          │                                       │
+│  行业建模  │                                       │
+├──────────┴───────────────────────────────────────┤
+│                   分页 / 版权                     │
+└──────────────────────────────────────────────────┘
+\`\`\`
+
+---
+
+### 4.4 数据集隔离（MVP 方案）
+
+MVP 采用 **逻辑隔离**，通过 `dataset_id` 列区分不同数据集，无需多数据库或多 Schema。
+
+**数据库层：**
+- `ontology_objects` 和 `ontology_links` 各新增 `dataset_id VARCHAR(100) NOT NULL DEFAULT 'default'`
+- `ontology_types` 全局共享（本体定义跨数据集复用）
+- 新增复合索引覆盖常见查询模式
+
+**API 层：**
+- 所有对象/链接查询支持 `?dataset=xxx` 过滤，缺省值 `default`
+- 图谱实例视图支持 `?dataset=xxx`
+
+**控制台层：**
+- 顶部工具栏"数据集选择器"切换当前活跃数据集
+- 切换后实例管理页面自动按选中数据集过滤
+
+**MVP 限制（有意为之）：**
+- 不做 dataset 级别的访问控制（MVP 单用户/单团队场景）
+- dataset 通过 API 管理，不提供独立管理页面
+- 多租户访问控制留至 Phase 3
+
+
+---
+
+## 5. REST API 设计
+
+### 5.1 端点一览
+
+\`\`\`
+# 类型定义
+GET    /api/v1/types                          # 类型列表（支持 ?type=OBJECT 过滤）
+POST   /api/v1/types                          # 创建类型
+GET    /api/v1/types/:apiName                 # 类型详情
+PUT    /api/v1/types/:apiName                 # 更新类型
+DELETE /api/v1/types/:apiName                 # 删除类型
+PATCH  /api/v1/types/:apiName/properties      # 编辑属性
+
+# 对象实例
+GET    /api/v1/objects                        # 对象列表（?type=Customer&dataset=default&page=1&size=20）
+POST   /api/v1/objects                        # 创建对象
+GET    /api/v1/objects/:id                    # 对象详情
+PUT    /api/v1/objects/:id                    # 更新对象
+DELETE /api/v1/objects/:id                    # 删除对象
+GET    /api/v1/objects/search?q=xxx           # 搜索对象
+
+# 链接
+GET    /api/v1/links                          # 链接列表（?dataset=default）
+POST   /api/v1/links                          # 创建链接
+DELETE /api/v1/links/:id                      # 删除链接
+
+# 图谱
+GET    /api/v1/graph/structure                # 结构图谱（类型级，不过滤 dataset）
+GET    /api/v1/graph/entities                 # 实体图谱（?dataset=default）
+
+# 动作
+POST   /api/v1/actions/:actionName            # 执行动作
+GET    /api/v1/actions/history                # Action 历史列表
+
+# 行业建模
+GET    /api/v1/templates                      # 模板列表
+GET    /api/v1/templates/:id                  # 模板详情
+POST   /api/v1/templates/:id/analyze          # LLM 映射分析
+POST   /api/v1/templates/:id/apply            # 执行导入
+
+# 数据集
+GET    /api/v1/datasets                       # 数据集列表
+POST   /api/v1/datasets                       # 创建数据集
+
+# 系统
+GET    /api/v1/stats                          # 系统统计概览
+\`\`\`
+
+### 5.2 图谱 API 响应格式
+
+\`\`\`json
+// GET /api/v1/graph/structure
+{
+  "nodes": [
+    {
+      "id": "Customer",
+      "label": "客户",
+      "apiName": "Customer",
+      "type": "OBJECT",
+      "color": "#52c41a",
+      "propertyCount": 6
+    }
+  ],
+  "edges": [
+    {
+      "id": "belongs_to",
+      "source": "ATPCommitment",
+      "target": "Customer",
+      "label": "属于",
+      "relationship": "belongs_to"
+    }
+  ]
+}
+\`\`\`
+
+### 5.3 行业模板 API
+
+\`\`\`json
+// GET /api/v1/templates
+[
+  {
+    "id": "supply-chain-atp",
+    "name": "供应链 ATP",
+    "description": "涵盖客户、订单、物料、库存、交期承诺等核心供应链实体",
+    "tags": ["supply-chain", "atp", "manufacturing"],
+    "stats": { "objectTypes": 12, "linkTypes": 19, "actionTypes": 12 }
+  }
+]
+
+// GET /api/v1/templates/supply-chain-atp
+{
+  "id": "supply-chain-atp",
+  "name": "供应链 ATP",
+  "objectTypes": [
+    {
+      "apiName": "Customer",
+      "displayName": "客户",
+      "properties": [
+        {"name": "id", "type": "STRING", "required": true, "description": "客户ID"},
+        {"name": "name", "type": "STRING", "description": "客户名称"},
+        {"name": "region", "type": "STRING", "description": "所属区域"},
+        {"name": "credit_limit", "type": "DECIMAL", "description": "信用额度"}
+      ]
+    }
+  ],
+  "linkTypes": [
+    {
+      "apiName": "belongs_to",
+      "source": "ATPCommitment",
+      "target": "Customer",
+      "description": "交期承诺所属的客户"
+    }
+  ],
+  "actionTypes": [
+    {
+      "apiName": "ApproveCommitment",
+      "description": "审批通过一条交期承诺",
+      "parameters": [
+        {"name": "commitmentId", "type": "STRING", "required": true, "description": "承诺 ID"},
+        {"name": "approver", "type": "STRING", "required": true, "description": "审批人"}
+      ]
+    }
+  ]
+}
+\`\`\`
+
+### 5.4 认证（MVP）
+
+MVP 采用 **API Key 认证**——足够简单，足够安全。
+
+**方案：**
+- 所有 API 请求需携带 `X-API-Key` 请求头
+- API Key 通过环境变量 `API_KEY` 注入，首次启动若未配置则自动生成 UUID 并打印到日志
+- 无 Key 或 Key 错误 → 返回 `401 Unauthorized`
+- 控制台前端通过 `CONSOLE_API_KEY` 环境变量注入，自动携带到所有请求
+
+**配置示例：**
+\`\`\`yaml
+# docker-compose.yml
+api:
+  environment:
+    API_KEY: "your-secret-key-here"
+
+console:
+  environment:
+    CONSOLE_API_KEY: "your-secret-key-here"
+\`\`\`
+
+**请求示例：**
+\`\`\`bash
+curl -H "X-API-Key: your-secret-key-here" \
+  http://localhost:8000/api/v1/types
+\`\`\`
+
+**MVP 边界（刻意简化）：**
+- 单一 Key，无用户概念，无角色区分
+- Key 不轮转（生产环境自行处理）
+- OAuth2 / RBAC 留至 Phase 3
+
+### 5.5 错误响应规范
+
+所有 API 错误返回统一 JSON 格式（参考 RFC 9457）：
+
+\`\`\`json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "属性 'name' 为必填项",
+    "details": [
+      {
+        "field": "name",
+        "code": "REQUIRED",
+        "message": "不能为空"
+      }
+    ],
+    "request_id": "req_abc123xyz"
+  }
+}
+\`\`\`
+
+**错误码规范（UPPER_SNAKE_CASE）：**
+
+| HTTP 状态码 | error.code | 触发场景 |
+|------------|------------|---------|
+| 400 | VALIDATION_ERROR | 请求参数格式/必填校验失败 |
+| 400 | INVALID_JSON | 请求体不是合法 JSON |
+| 401 | UNAUTHORIZED | 缺少或错误的 API Key |
+| 404 | NOT_FOUND | 资源不存在 |
+| 409 | CONFLICT | 资源已存在（如重复 api_name） |
+| 422 | BUSINESS_RULE_ERROR | 业务规则违反（如删除仍被引用的类型） |
+| 500 | INTERNAL_ERROR | 服务器内部错误 |
+
+**字段说明：**
+- `code`：机器可读，前端根据此字段做分支处理
+- `message`：人类可读描述（中文）
+- `details`：可选，字段级错误数组（仅校验场景）
+- `request_id`：每次请求唯一 ID，同时写入服务端日志，便于追踪
+
+
+---
+
+## 6. 行业建模（LLM 辅助映射流程）
+
+这是 MVP 中最具差异化竞争力的功能。用户不需要手动建模——选择模板，LLM 自动完成映射。
+
+### 6.1 完整流程
+
+\`\`\`
+Step 1: 选择模板 → Step 2: 配置数据库 → Step 3: 预览与调整 → Step 4: 执行
+\`\`\`
+
+### 6.2 LLM 映射逻辑（Phase 2 实现，MVP 预留入口）
+
+\`\`\`
+用户数据库 Schema（如 ERP 表结构）
+         │
+         ▼
+┌────────────────────────────────────────────┐
+│  LLM 分析：                                │
+│  customers 表 → Customer 对象              │
+│  ├─ id (INT)   → id (STRING, PK)           │
+│  ├─ cust_name → name (STRING)              │
+│  └─ region    → region (STRING)            │
+│                                            │
+│  外键 cust_id → Link: Order.belongs_to     │
+│                    Customer                │
+└────────────────────────────────────────────┘
+         │
+         ▼
+用户确认 → 一键导入本体定义
+\`\`\`
+
+**MVP 阶段**：行业建模页面展示模板卡片，用户选择后直接导入预设的本体定义（无 LLM 映射），LLM 映射功能在 Phase 2 接入。
+
+---
+
+## 7. 前端实现要点
+
+### 7.1 技术选型
+
+| 模块 | 技术 | 原因 |
+|------|------|------|
+| 框架 | React 18 + Vite | 启动快、生态成熟 |
+| UI 组件库 | Ant Design 5 | 企业级组件，Table/Form/Modal 开箱即用 |
+| 图谱可视化 | React Flow (xyflow) | 轻量、可定制 |
+| 状态管理 | React Query (TanStack Query) | API 缓存、自动刷新 |
+| 路由 | React Router 6 | SPA 路由 |
+| HTTP 客户端 | Axios | 请求拦截（统一注入 X-API-Key）|
+| 包管理 | pnpm | 快、节省磁盘 |
+
+### 7.2 页面路由
+
+\`\`\`
+/                          → 重定向到 /graph
+/graph                     → 本体图谱（首页）
+/types                     → 类型定义列表
+/instances                 → 实例管理
+/instances?type=Customer   → 实例管理（按类型筛选）
+/modeling                  → 行业建模
+\`\`\`
+
+### 7.3 关键组件
+
+| 组件 | 用途 |
+|------|------|
+| `OntologyGraph` | 力导向图谱画布 |
+| `TypeCard` | 类型定义卡片 |
+| `TypeFormModal` | 类型编辑弹窗（含属性表格） |
+| `InstanceTable` | 实例数据表格 + 分页 |
+| `TemplateCard` | 行业模板卡片 |
+| `ModelingStepper` | 建模流程步骤条 |
+| `ApiKeyProvider` | 全局 API Key 注入（Axios 拦截器）|
+
+---
+
+## 8. 部署
+
+### 8.1 Docker Compose
+
+\`\`\`yaml
+version: '3.8'
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: ontologyready
+      POSTGRES_USER: ontologyready
+      POSTGRES_PASSWORD: ontologyready
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ontologyready"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://ontologyready:ontologyready@postgres:5432/ontologyready
+      API_KEY: "${API_KEY:-please-change-this-key}"   # 必须修改
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  console:
+    build: ./console
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:8000/api/v1
+      VITE_API_KEY: "${API_KEY:-please-change-this-key}"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:
+\`\`\`
+
+### 8.2 快速开始
+
+\`\`\`bash
+# 克隆并启动
+git clone https://github.com/ontologyready/ontologyready.git
+cd ontologyready
+
+# 配置 API Key（必须修改）
+echo "API_KEY=$(uuidgen)" > .env
+
+# 一键启动
+docker-compose up -d
+
+# 打开浏览器
+open http://localhost:3000
+\`\`\`
+
+---
+
+## 9. 路线图
+
+### Phase 1: MVP（8 周）
+
+| 周 | 任务 | 交付物 |
+|----|------|--------|
+| 1 | 4 张核心表 DDL + 数据模型定义 | init.sql |
+| 2-3 | REST API（类型定义 + 对象 CRUD + 认证 + 错误规范） | API 服务可用 |
+| 4 | 前端框架搭建 + 类型定义页面 | 类型定义页 |
+| 5 | 图谱可视化页面（React Flow） | 本体图谱页 |
+| 6 | 实例管理页面（表格+筛选+分页） | 实例管理页 |
+| 7 | 行业建模页面 + 2 个内置模板 | 行业建模页 |
+| 8 | Docker Compose 集成 + E2E 测试 + 文档 | 可发布版本 |
+
+**Phase 1 交付物清单：**
+- [ ] PostgreSQL 核心表 + 索引（含 dataset_id）
+- [ ] REST API（15+ 端点）+ API Key 认证 + 统一错误响应
+- [ ] 控制台 4 个主页面（图谱/类型/实例/建模）
+- [ ] 2 个行业预设模板（含完整 Description）
+- [ ] Docker Compose 一键部署
+
+### Phase 2: 增强（4 周）
+
+- LLM 辅助映射（对接 OpenAI / 通义千问 API）
+- 动作定义和执行引擎（含 before/after snapshot）
+- Action 历史日志页面
+- Description 必填校验 + AI 描述建议功能
+- 本体导入导出（YAML / JSON）
+- 数据集管理页面
+
+### Phase 3: 生态（按需）
+
+- pgvector 语义检索
+- Apache AGE 大图支持（> 100 万节点场景）
+- OAG 查询接口（面向 AI Agent）
+- Skill 自动生成
+- 成熟度管理工作流（Draft → Active → Deprecated）
+- OAuth2 / RBAC / SSO（多用户/多团队场景）
+- 多租户隔离（Row-Level Security）
+
+---
+
+## 10. 预设模板定义（MVP）
+
+### 模板 1：供应链 ATP
+
+| 对象类型 | 核心属性 |
+|----------|---------|
+| Customer | id, name, region, credit_limit |
+| Product | id, name, category, unit, price |
+| SalesOrder | id, customer_id, status, total_amount, created_at |
+| ATPCommitment | id, order_id, committed_date, confidence, deviation |
+| ProductionOrder | id, product_id, quantity, status, due_date |
+| Inventory | id, product_id, quantity, warehouse |
+| Supplier | id, name, region, rating |
+| PurchaseOrder | id, supplier_id, status, total |
+| 共 12 个类型 | |
+
+| 关系类型 | 源 → 目标 |
+|---------|----------|
+| belongs_to | ATPCommitment → Customer |
+| contains | SalesOrder → Product |
+| triggers | ATPCommitment → ProductionOrder |
+| governed_by | ATPCommitment → Inventory |
+| supplied_by | Product → Supplier |
+| 共 19 个关系 | |
+
+### 模板 2：客户管理 CRM
+
+对象类型（8 个）：Customer, Lead, Opportunity, Contact, Activity, Order, Product, User
+
+---
+
+## 11. 非功能性需求
+
+| 维度 | MVP 目标 | 备注 |
+|------|----------|------|
+| 部署时间 | < 5 分钟（docker-compose up -d） | 3 容器启动 |
+| API 响应（P99） | < 50ms | 单 PG 查询 |
+| 图遍历 2 跳（10 万节点） | < 20ms | 递归 CTE |
+| 图遍历 3 跳（10 万节点） | < 80ms | 递归 CTE |
+| 图谱渲染（500 节点） | < 2s | React Flow |
+| 表查询（10 万行） | < 100ms | GIN + B-tree 索引 |
+| 容器数量 | 3 | PG 16 + API + Console |
+| 镜像大小 | < 500MB | 含前端构建产物 |
+
+---
+
+## 12. 竞品定位
+
+| 维度 | OntologyReady | Palantir Foundry |
+|------|--------------|------------------|
+| **部署** | Docker Compose 一键 | 专有集群 |
+| **架构** | 4 张 PG 表 + API + UI | 数百微服务 |
+| **控制台** | ✅ 图谱/类型/实例/建模 | ✅ 完整 |
+| **行业模板** | ✅ MVP 内置 2 套 | ✅ 200+ |
+| **LLM 映射** | Phase 2 | ✅ 内置 |
+| **认证** | API Key（MVP），OAuth2（Phase 3）| ✅ 完整 RBAC |
+| **费用** | 免费开源 | 极高 |
+| **适用** | 中小企业 / PoC / 快速验证 | 超大型企业 |
+
+---
+
+## 13. 术语表
+
+| 术语 | 定义 |
+|------|------|
+| **ObjectType** | 业务实体类型定义（如 Customer, Order），含属性和语义描述 |
+| **LinkType** | 对象间关系类型定义（如 belongs_to），链接自身可带属性 |
+| **ActionType** | 可执行业务操作类型定义（如 ApproveOrder），原子性和审计保证 |
+| **config** | ontology_types 表的 JSONB 配置字段，存储颜色/图标/参数等类型级元数据 |
+| **dataset_id** | 数据集标识，用于逻辑隔离不同业务场景的对象实例和链接，默认值 'default' |
+| **API Key** | MVP 认证凭证，通过 X-API-Key 请求头传递，单一密钥无角色区分 |
+| **error.code** | 错误响应中的机器可读错误码（UPPER_SNAKE_CASE），前端据此做分支处理 |
+| **本体图谱** | 以可视化图形展示对象类型及其关系网络 |
+| **行业模板** | 预设的最佳实践本体模型，可一键导入 |
+| **LLM 映射** | 利用大语言模型自动将数据库 Schema 映射为本体定义（Phase 2）|
+| **混合存储模式** | 核心字段用原生列 + 灵活属性用 JSONB(LZ4) + 高频字段用生成列 |
+| **递归 CTE** | PostgreSQL WITH RECURSIVE 查询，无需图引擎即可实现图遍历 |
+| **成熟度** | 本体类型生命周期状态：DRAFT → ACTIVE → DEPRECATED |
+| **幂等性** | 相同 Action 参数重复执行，结果保持一致 |
+
+---
+
+## 14. 参考来源
+
+- [Ontological Engineering: 基于 PolarDB-PG 智能本体引擎](https://developer.aliyun.com/article/1732640)
+- [Palantir Ontology and Pipeline Design Principles](https://community.palantir.com/t/ontology-and-pipeline-design-principles/5481)
+- [Palantir Ontology SDK](https://blog.palantir.com/building-with-palantir-aip-the-ontology-software-development-kit-823fe5ac7aae)
+- [Microsoft Fabric Ontology (Preview)](https://learn.microsoft.com/en-gb/fabric/iq/ontology/overview)
+- [Large Ontology Models (arXiv 2026)](https://arxiv.org/abs/2602.00029)
+- [Building a Personal Knowledge Graph with Just PostgreSQL](https://dev.to/micelclaw/4o-building-a-personal-knowledge-graph-with-just-postgresql-no-neo4j-needed-22b2)
+- [PostgreSQL JSONB vs Relational (Swiss PGDay 2025)](https://www.pgday.ch/common/slides/2025_objects-vs-tables-2025.pdf)
+- [RFC 9457: Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457)
+- [REST API Error Handling Best Practices](https://www.restguide.info/error-handling)
+- [React Flow (xyflow)](https://reactflow.dev/)
+- [Ant Design](https://ant.design/)
+
