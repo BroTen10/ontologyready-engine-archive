@@ -1,0 +1,37 @@
+{
+  "id": "crm",
+  "name": "客户管理 CRM",
+  "description": "涵盖客户、线索、商机、联系人、活动等核心 CRM 实体",
+  "tags": ["crm", "sales", "customer"],
+  "stats": { "objectTypes": 8, "linkTypes": 10, "actionTypes": 6 },
+  "objectTypes": [
+    { "api_name": "Customer", "display_name": "客户", "description": "企业客户实体，包含公司名称、行业、规模、地区、客户等级、年收入" },
+    { "api_name": "Lead", "display_name": "线索", "description": "潜在客户线索，包含来源渠道、联系人、意向产品、状态、分配销售" },
+    { "api_name": "Opportunity", "display_name": "商机", "description": "销售商机，包含预计金额、阶段、赢率、预计成交日期、竞争情况" },
+    { "api_name": "Contact", "display_name": "联系人", "description": "客户企业联系人，包含姓名、职位、电话、邮箱、决策角色" },
+    { "api_name": "Activity", "display_name": "活动", "description": "销售活动记录，包含活动类型（电话/拜访/演示）、主题、时间、结果" },
+    { "api_name": "Order", "display_name": "订单", "description": "客户订单，包含订单编号、金额、状态、付款方式、交付日期" },
+    { "api_name": "Product", "display_name": "产品", "description": "产品/服务 SKU，包含名称、类别、标准价格、描述" },
+    { "api_name": "User", "display_name": "用户", "description": "销售人员/系统用户，包含姓名、角色、所属团队、KPI 指标" }
+  ],
+  "linkTypes": [
+    { "api_name": "lead_converts_to_opportunity", "display_name": "线索转商机", "description": "Lead → Opportunity" },
+    { "api_name": "opportunity_for_customer", "display_name": "商机关联客户", "description": "Opportunity → Customer" },
+    { "api_name": "contact_belongs_to_customer", "display_name": "联系人归属客户", "description": "Contact → Customer" },
+    { "api_name": "activity_for_opportunity", "display_name": "活动关联商机", "description": "Activity → Opportunity" },
+    { "api_name": "activity_for_lead", "display_name": "活动关联线索", "description": "Activity → Lead" },
+    { "api_name": "order_for_customer", "display_name": "订单关联客户", "description": "Order → Customer" },
+    { "api_name": "order_contains_product", "display_name": "订单包含产品", "description": "Order → Product" },
+    { "api_name": "user_owns_opportunity", "display_name": "销售负责商机", "description": "User → Opportunity" },
+    { "api_name": "user_owns_lead", "display_name": "销售负责线索", "description": "User → Lead" },
+    { "api_name": "activity_performed_by", "display_name": "活动执行人", "description": "Activity → User" }
+  ],
+  "actionTypes": [
+    { "api_name": "QualifyLead", "display_name": "线索评分", "description": "对线索进行评分和资格审核，决定是否转化为商机" },
+    { "api_name": "ConvertLead", "display_name": "线索转化", "description": "将合格线索转化为商机，自动创建关联客户和联系人" },
+    { "api_name": "UpdatePipeline", "display_name": "更新销售管道", "description": "更新商机阶段和预计金额，触发销售漏斗分析" },
+    { "api_name": "CreateActivity", "display_name": "创建活动", "description": "记录新的销售活动，关联线索或商机，设置提醒" },
+    { "api_name": "CloseOpportunity", "display_name": "关闭商机", "description": "关闭商机（赢单/丢单），更新赢单原因或丢单分析" },
+    { "api_name": "AssignLead", "display_name": "分配线索", "description": "将线索分配给销售人员，支持轮询和区域匹配规则" }
+  ]
+}
