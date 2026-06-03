@@ -1,13 +1,21 @@
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
-import { Layout, Menu, Select, Dropdown, Space } from "antd";
+import { Layout, Menu, Select, Dropdown, Space, Button } from "antd";
 import {
   ApartmentOutlined,
   AppstoreOutlined,
   DatabaseOutlined,
   BuildOutlined,
   UserOutlined,
+  ThunderboltOutlined,
+  CodeOutlined,
+  RobotOutlined,
+  SearchOutlined,
+  SettingOutlined,
+  LogoutOutlined,
+  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import { useDataset } from "../hooks/useDataset";
+import { useAuth } from "../hooks/useAuth";
 
 const { Sider, Header, Content, Footer } = Layout;
 
@@ -15,15 +23,38 @@ const menuItems = [
   { key: "/graph", icon: <ApartmentOutlined />, label: "本体图谱" },
   { key: "/types", icon: <AppstoreOutlined />, label: "类型定义" },
   { key: "/instances", icon: <DatabaseOutlined />, label: "实例管理" },
+  { key: "/search", icon: <SearchOutlined />, label: "高级搜索" },
+  { key: "/automodel", icon: <ThunderboltOutlined />, label: "自动建模" },
   { key: "/modeling", icon: <BuildOutlined />, label: "行业建模" },
+  { key: "/skills", icon: <CodeOutlined />, label: "Skills 技能" },
+  { key: "/llm-config", icon: <RobotOutlined />, label: "LLM 配置" },
 ];
 
 export default function MainLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { dataset, setDataset } = useDataset();
+  const { dataset, setDataset, datasets } = useDataset();
+  const { user, logout } = useAuth();
 
   const selectedKey = "/" + (location.pathname.split("/")[1] || "graph");
+
+  const userMenuItems = [
+    { key: "settings", icon: <SettingOutlined />, label: "个人设置", onClick: () => navigate("/settings") },
+  ];
+
+  if (user?.is_superuser) {
+    userMenuItems.push({
+      key: "admin",
+      icon: <SafetyCertificateOutlined />,
+      label: "管理面板",
+      onClick: () => navigate("/admin"),
+    });
+  }
+
+  userMenuItems.push(
+    { type: "divider" as const },
+    { key: "logout", icon: <LogoutOutlined />, label: "退出登录", onClick: () => logout().then(() => navigate("/login")) },
+  );
 
   return (
     <Layout style={{ minHeight: "100vh" }}>
@@ -65,23 +96,20 @@ export default function MainLayout() {
           <Select
             value={dataset}
             onChange={setDataset}
-            style={{ width: 160 }}
-            options={[
-              { value: "default", label: "默认数据集" },
-            ]}
+            style={{ width: 180 }}
+            options={(datasets || [{ value: "default", label: "默认数据集" }]).map((d: { value: string; label: string }) => ({
+              value: d.value,
+              label: d.label,
+            }))}
           />
-          <Dropdown
-            menu={{
-              items: [{ key: "admin", label: "管理员" }],
-            }}
-          >
+          <Dropdown menu={{ items: userMenuItems }}>
             <Space style={{ cursor: "pointer" }}>
               <UserOutlined />
-              admin
+              {user?.username || user?.full_name || "用户"}
             </Space>
           </Dropdown>
         </Header>
-        <Content style={{ margin: 16, padding: 24, background: "#fff", borderRadius: 8 }}>
+        <Content style={{ margin: 16, padding: 24, background: "#fff", borderRadius: 8, minHeight: 520 }}>
           <Outlet />
         </Content>
         <Footer style={{ textAlign: "center", color: "#999" }}>

@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { HashRouter } from "react-router-dom";
 import { ConfigProvider, App as AntApp } from "antd";
 import zhCN from "antd/locale/zh_CN";
+import { AuthProvider } from "./hooks/useAuth";
+import { DatasetProvider } from "./hooks/useDataset";
 import AppRouter from "./AppRouter";
 
 const queryClient = new QueryClient({
@@ -16,7 +18,11 @@ export default function App() {
       <ConfigProvider locale={zhCN}>
         <AntApp>
           <HashRouter>
-            <AppRouter />
+            <AuthProvider>
+              <DatasetProvider>
+                <AppRouter />
+              </DatasetProvider>
+            </AuthProvider>
           </HashRouter>
         </AntApp>
       </ConfigProvider>

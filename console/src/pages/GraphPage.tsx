@@ -23,6 +23,10 @@ import {
   Segmented,
   message,
   Space,
+  Input,
+  Alert,
+  Descriptions,
+  Divider,
 } from "antd";
 import {
   DatabaseOutlined,
@@ -33,9 +37,12 @@ import {
   ReloadOutlined,
   CameraOutlined,
   ApartmentOutlined,
+  SearchOutlined,
+  BranchesOutlined,
+  EnvironmentOutlined,
 } from "@ant-design/icons";
 import dagre from "dagre";
-import { fetchStructureGraph, fetchEntityGraph, fetchStats, type GraphData } from "../api/endpoints";
+import { fetchStructureGraph, fetchEntityGraph, fetchStats, findPath, getNeighbors, fetchGraphStats, type GraphData } from "../api/endpoints";
 import { useDataset } from "../hooks/useDataset";
 import { useNavigate } from "react-router-dom";
 
@@ -87,6 +94,19 @@ export default function GraphPage() {
   const { dataset } = useDataset();
   const [graphTab, setGraphTab] = useState<"structure" | "entities">("structure");
   const [layoutMode, setLayoutMode] = useState<LayoutMode>("dagre-tb");
+
+  // Phase B: 路径查找
+  const [pathSource, setPathSource] = useState("");
+  const [pathTarget, setPathTarget] = useState("");
+  const [pathResult, setPathResult] = useState<Awaited<ReturnType<typeof findPath>> | null>(null);
+  const [pathLoading, setPathLoading] = useState(false);
+
+  // Phase B: 图谱统计
+  const { data: graphStats } = useQuery({
+    queryKey: ["graph-stats", dataset],
+    queryFn: () => fetchGraphStats(dataset),
+    enabled: graphTab === "entities",
+  });
 
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["stats"],
@@ -170,6 +190,37 @@ export default function GraphPage() {
     { title: "今日动作", value: stats?.actionsToday ?? 0, icon: <ThunderboltOutlined />, color: "#fa8c16" },
   ];
 
+  // Phase B: 路径查找处理
+  const handleFindPath = useCallback(async () => {
+    if (!pathSource || !pathTarget) {
+      message.warning("请输入起点和终点节点 ID");
+      return;
+    }
+    setPathLoading(true);
+    try {
+      const result = await findPath(pathSource, pathTarget, dataset);
+      setPathResult(result);
+      if (result.found) {
+        message.success(`找到路径，长度: ${result.length}`);
+      } else {
+        message.info("未找到路径");
+      }
+    } catch {
+      message.error("路径查找失败");
+    } finally {
+      setPathLoading(false);
+    }
+  }, [pathSource, pathTarget, dataset]);
+
+  const handleExploreNeighbors = useCallback(async (nodeId: string) => {
+    try {
+      const result = await getNeighbors(nodeId, dataset, "both");
+      message.info(`节点 ${nodeId} 有 ${result.count} 个邻居`);
+    } catch {
+      message.error("邻居查询失败");
+    }
+  }, [dataset]);
+
   const layoutLabels: Record<LayoutMode, string> = {
     "dagre-tb": "上下层次",
     "dagre-lr": "左右层次",
@@ -191,6 +242,58 @@ export default function GraphPage() {
           </Card>
         ))}
       </div>
+
+      {/* Phase B: 路径查找 & 图谱统计 */}
+      {graphTab === "entities" && (
+        <Card size="small" title={<><BranchesOutlined /> 路径查找 & 图谱分析</>} style={{ marginBottom: 16 }}>
+          <Space direction="vertical" style={{ width: "100%" }}>
+            <Space>
+              <Input
+                placeholder="起点节点 UUID"
+                value={pathSource}
+                onChange={(e) => setPathSource(e.target.value)}
+                style={{ width: 300 }}
+                prefix={<EnvironmentOutlined />}
+              />
+              <Input
+                placeholder="终点节点 UUID"
+                value={pathTarget}
+                onChange={(e) => setPathTarget(e.target.value)}
+                style={{ width: 300 }}
+                prefix={<EnvironmentOutlined />}
+              />
+              <Button
+                type="primary"
+                icon={<SearchOutlined />}
+                loading={pathLoading}
+                onClick={handleFindPath}
+              >
+                查找最短路径
+              </Button>
+            </Space>
+            {pathResult && (
+              <Alert
+                type={pathResult.found ? "success" : "info"}
+                message={pathResult.found ? `找到路径 (长度: ${pathResult.length})` : "未找到路径"}
+                description={
+                  pathResult.found
+                    ? `路径: ${pathResult.path.map((n) => n.label).join(" → ")}`
+                    : "两节点之间不存在可达路径"
+                }
+                style={{ marginTop: 8 }}
+              />
+            )}
+            {graphStats && (
+              <Descriptions size="small" column={4} style={{ marginTop: 8 }}>
+                <Descriptions.Item label="节点数">{graphStats.nodeCount}</Descriptions.Item>
+                <Descriptions.Item label="边数">{graphStats.edgeCount}</Descriptions.Item>
+                <Descriptions.Item label="密度">{graphStats.density}</Descriptions.Item>
+                <Descriptions.Item label="平均度">{graphStats.averageDegree}</Descriptions.Item>
+              </Descriptions>
+            )}
+          </Space>
+        </Card>
+      )}
 
       <Card
         title={

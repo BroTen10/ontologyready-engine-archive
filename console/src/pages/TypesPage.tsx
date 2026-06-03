@@ -196,6 +196,8 @@ export default function TypesPage() {
       }
     }).catch(() => {});
   };
+
+  const addProperty = () => {
     setProperties([...properties, { name: "", type: "STRING", required: false, description: "" }]);
   };
 

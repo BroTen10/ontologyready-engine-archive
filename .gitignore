@@ -40,6 +40,14 @@ dev-debug.log
 *.temp
 Thumbs.db
 
+# Python 缓存
+__pycache__/
+*.pyc
+
+# Playwright 测试输出
+playwright-report/
+test-results/
+
 # 用户输入文件 (旧 AI设计师平台)
 user_input_files/
 

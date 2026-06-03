@@ -5,6 +5,7 @@ from fastapi import APIRouter, Query
 
 from ..database import get_pool
 from ..errors import AppError, ErrorCode
+from ..schemas import MAX_BATCH_SIZE, ObjectsBatchRequest
 
 router = APIRouter(prefix="/api/v1/objects", tags=["objects"])
 
@@ -81,6 +82,47 @@ async def create_object(body: dict):
                 json.dumps(props),
             )
     return _row_to_object(dict(row))
+
+
+@router.post("/batch/create", status_code=201)
+async def batch_create_objects(body: ObjectsBatchRequest):
+    """Batch create objects in a single transaction. All-or-nothing."""
+    if len(body.items) > MAX_BATCH_SIZE:
+        raise AppError(
+            ErrorCode.VALIDATION_ERROR,
+            f"批量创建最多支持 {MAX_BATCH_SIZE} 条记录，当前 {len(body.items)} 条",
+        )
+    if not body.items:
+        raise AppError(ErrorCode.VALIDATION_ERROR, "items 不能为空")
+
+    pool = await get_pool()
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            # Pre-validate all object types exist and are OBJECT type
+            obj_types = {item.object_type for item in body.items}
+            for ot in obj_types:
+                type_row = await conn.fetchrow(
+                    "SELECT api_name FROM ontology_types WHERE api_name = $1 AND type = 'OBJECT' FOR UPDATE",
+                    ot,
+                )
+                if not type_row:
+                    raise AppError(
+                        ErrorCode.VALIDATION_ERROR,
+                        f"对象类型 '{ot}' 不存在或不是 OBJECT 类型",
+                    )
+
+            results = []
+            for item in body.items:
+                row = await conn.fetchrow(
+                    """INSERT INTO ontology_objects (object_type, external_id, dataset_id, properties)
+                       VALUES ($1, $2, $3, $4::jsonb) RETURNING *""",
+                    item.object_type,
+                    item.external_id,
+                    item.dataset_id,
+                    json.dumps(item.properties),
+                )
+                results.append(_row_to_object(dict(row)))
+    return {"created": len(results), "items": results}
 
 
 @router.get("/search")

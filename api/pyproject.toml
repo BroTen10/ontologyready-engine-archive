@@ -9,6 +9,10 @@ dependencies = [
     "asyncpg>=0.30.0",
     "pydantic-settings>=2.7.0",
     "python-dotenv>=1.0.0",
+    "alembic>=1.18.0",
+    "sqlalchemy[asyncio]>=2.0",
+    "passlib[bcrypt]>=1.7",
+    "pyjwt>=2.10",
 ]
 
 [project.optional-dependencies]
